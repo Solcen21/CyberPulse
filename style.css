@@ -799,33 +799,63 @@ footer {
     margin-top: 4rem;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1024px) {
     .app-container {
-        grid-template-columns: 250px 1fr;
+        display: flex;
+        flex-direction: column;
+        height: auto;
     }
 
+    .briefings-sidebar,
     .intelligence-right {
-        display: none;
+        width: 100%;
+        border-right: none;
+        border-left: none;
+        border-bottom: 1px solid var(--border-color);
+        max-height: none;
+        overflow: visible;
+        padding: 1.5rem;
     }
-}
 
-@media (max-width: 900px) {
-    .app-container {
-        display: block;
+    /* Reorder for mobile: News first, then Intel, then CVEs */
+    main {
+        order: 1;
+        padding: 1.5rem;
     }
 
     .briefings-sidebar {
-        display: none;
+        order: 2;
     }
-}
 
-@media (max-width: 768px) {
+    .intelligence-right {
+        display: flex;
+        /* Force show on mobile */
+        order: 3;
+    }
+
     header {
-        flex-direction: column;
-        gap: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+        padding: 1rem 5%;
+    }
+
+    .app-desc {
+        display: none;
+        /* Hide description on mobile to prevent overlap */
     }
 
     .search-container {
         width: 100%;
+        order: 3;
+        margin-top: 0.5rem;
+    }
+
+    .header-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .logo h1 {
+        font-size: 1.2rem;
     }
 }

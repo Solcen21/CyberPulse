@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberPulse | Latest Security News</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <!-- PWA Configuration -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-192.png" type="image/png">
+    <meta name="theme-color" content="#00ff9d">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+
+<body>
+    <div class="background-glow"></div>
+
+    <header>
+        <div class="logo">
+            <span class="pulse-icon"></span>
+            <h1>Cyber<span>Pulse</span></h1>
+        </div>
+        <div class="app-desc">Real-Time Threat Intelligence Platform</div>
+        <div class="header-controls">
+            <button id="pwaInstallBtn" class="install-btn" style="display: none;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+                </svg>
+                Install App
+            </button>
+            <div class="search-container">
+                <input type="text" id="newsSearch" placeholder="Search threats, leaks, vulnerabilities...">
+                <button id="searchBtn">
+                    <svg viewBox="0 0 24 24" width="18" height="18">
+                        <path fill="currentColor"
+                            d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <aside class="briefings-sidebar">
+            <div class="sidebar-header">
+                <h3>Threat Briefings</h3>
+                <p>Official Intelligence & Advisories</p>
+            </div>
+            <div class="briefing-group">
+                <label>News Outlets</label>
+                <div class="provider-dropdown" data-provider="hackernews">
+                    <div class="provider-header">
+                        <span>The Hacker News</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="bleeping">
+                    <div class="provider-header">
+                        <span>BleepingComputer</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="darkreading">
+                    <div class="provider-header">
+                        <span>Dark Reading</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="cyberscoop">
+                    <div class="provider-header">
+                        <span>CyberScoop</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="securityweek">
+                    <div class="provider-header">
+                        <span>SecurityWeek</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="zdnet">
+                    <div class="provider-header">
+                        <span>ZDNet Security</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+            </div>
+            <div class="briefing-group">
+                <label>Commercial Intel</label>
+                <div class="provider-dropdown" data-provider="crowdstrike">
+                    <div class="provider-header">
+                        <span>CrowdStrike Intelligence</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="huntress">
+                    <div class="provider-header">
+                        <span>Huntress Research</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="sentinelone">
+                    <div class="provider-header">
+                        <span>SentinelLabs (S1)</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="mandiant">
+                    <div class="provider-header">
+                        <span>Mandiant Intelligence</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="microsoft">
+                    <div class="provider-header">
+                        <span>Microsoft Security</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+            </div>
+            <div class="briefing-group">
+                <label>Government & Standards</label>
+                <div class="provider-dropdown" data-provider="acsc">
+                    <div class="provider-header">
+                        <span>ACSC Advisories (AU)</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="nist">
+                    <div class="provider-header">
+                        <span>NIST CSRC News</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+                <div class="provider-dropdown" data-provider="cisa">
+                    <div class="provider-header">
+                        <span>CISA Alerts (US)</span>
+                        <span class="dropdown-icon">▼</span>
+                    </div>
+                    <div class="provider-feed"></div>
+                </div>
+            </div>
+        </aside>
+
+        <main>
+            <div class="filter-bar">
+                <h2>Latest News <span class="time-label">(Last 24 Hours)</span></h2>
+                <div class="status-indicator">
+                    <span class="dot live"></span>
+                    <span id="update-status">Monitoring Feeds...</span>
+                </div>
+                <button id="backToNews" class="back-btn" style="display: none;">← Back to News</button>
+            </div>
+
+            <div id="discoveryView" class="discovery-view" style="display: none;">
+                <!-- Discovery Content will be injected here -->
+            </div>
+
+            <div id="newsGrid" class="news-grid">
+                <!-- Loading States -->
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+            </div>
+        </main>
+
+        <aside class="intelligence-right">
+            <!-- Top 10 CVEs -->
+            <div class="collapsible-section open" id="section-critical">
+                <div class="section-header" onclick="toggleSection('section-critical')">
+                    <h3>Top 10 Critical CVEs</h3>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="section-content">
+                    <p class="section-desc">Last 30 Days | CVSS 7.0+</p>
+                    <div id="cveLeaderboard" class="cve-list">
+                        <div class="skeleton-item mini"></div>
+                        <div class="skeleton-item mini"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent CVE Stream -->
+            <div class="collapsible-section open" id="section-recent">
+                <div class="section-header" onclick="toggleSection('section-recent')">
+                    <h3>Latest CVE Stream</h3>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="section-content">
+                    <div id="cveRecent" class="cve-list">
+                        <div class="skeleton-item mini"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Breach Tracker -->
+            <div class="collapsible-section open" id="section-breaches">
+                <div class="section-header" onclick="toggleSection('section-breaches')">
+                    <h3>Data Breach Tracker</h3>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="section-content">
+                    <p class="section-desc">Global Incidents (Last Month)</p>
+                    <div id="breachList" class="breach-list">
+                        <div class="skeleton-item"></div>
+                        <div class="skeleton-item"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 CyberPulse Security Intelligence. Data sourced from major security bulletins.</p>
+    </footer>
+
+    <script src="main.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('Service Worker registered', reg))
+                    .catch(err => console.log('Service Worker registration failed', err));
+            });
+        }
+    </script>
+</body>
+
+</html>

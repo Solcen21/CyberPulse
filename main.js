@@ -4,7 +4,11 @@ const NEWS_FEEDS = [
     { name: 'Dark Reading', url: 'https://www.darkreading.com/rss.xml', tag: 'Security' },
     { name: 'CyberScoop', url: 'https://cyberscoop.com/feed/', tag: 'Research' },
     { name: 'SecurityWeek', url: 'https://www.securityweek.com/feed/', tag: 'Vulnerability' },
-    { name: 'ZDNet Security', url: 'https://www.zdnet.com/topic/security/rss.xml', tag: 'Security' }
+    { name: 'ZDNet Security', url: 'https://www.zdnet.com/topic/security/rss.xml', tag: 'Security' },
+    { name: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/', tag: 'Investigation' },
+    { name: 'The Record', url: 'https://therecord.media/feed', tag: 'Global' },
+    { name: 'Help Net Security', url: 'https://www.helpnetsecurity.com/feed/', tag: 'Industry' },
+    { name: 'SC Media', url: 'https://www.scmagazine.com/rss.xml', tag: 'Enterprise' }
 ];
 
 const BREACH_FEEDS = [
@@ -19,6 +23,10 @@ const SIDEBAR_FEEDS = {
     'cyberscoop': { name: 'CyberScoop', url: 'https://cyberscoop.com/feed/', home: 'https://cyberscoop.com/' },
     'securityweek': { name: 'SecurityWeek', url: 'https://www.securityweek.com/feed/', home: 'https://www.securityweek.com/' },
     'zdnet': { name: 'ZDNet Security', url: 'https://www.zdnet.com/topic/security/rss.xml', home: 'https://www.zdnet.com/topic/security/' },
+    'krebs': { name: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/', home: 'https://krebsonsecurity.com/' },
+    'therecord': { name: 'The Record', url: 'https://therecord.media/feed', home: 'https://therecord.media/' },
+    'helpnet': { name: 'Help Net Security', url: 'https://www.helpnetsecurity.com/feed/', home: 'https://www.helpnetsecurity.com/' },
+    'scmedia': { name: 'SC Media', url: 'https://www.scmagazine.com/rss.xml', home: 'https://www.scmagazine.com/' },
     'crowdstrike': { name: 'CrowdStrike', url: 'https://www.crowdstrike.com/blog/feed/', home: 'https://www.crowdstrike.com/blog/' },
     'huntress': { name: 'Huntress', url: 'https://www.huntress.com/blog/rss.xml', home: 'https://www.huntress.com/blog/' },
     'sentinelone': { name: 'SentinelOne', url: 'https://www.sentinelone.com/labs/feed/', home: 'https://www.sentinelone.com/labs/' },

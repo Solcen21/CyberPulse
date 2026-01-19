@@ -13,20 +13,20 @@ const BREACH_FEEDS = [
 ];
 
 const SIDEBAR_FEEDS = {
-    'hackernews': { name: 'The Hacker News', url: 'https://feeds.feedburner.com/TheHackersNews' },
-    'bleeping': { name: 'BleepingComputer', url: 'https://www.bleepingcomputer.com/feed/' },
-    'darkreading': { name: 'Dark Reading', url: 'https://www.darkreading.com/rss.xml' },
-    'cyberscoop': { name: 'CyberScoop', url: 'https://cyberscoop.com/feed/' },
-    'securityweek': { name: 'SecurityWeek', url: 'https://www.securityweek.com/feed/' },
-    'zdnet': { name: 'ZDNet Security', url: 'https://www.zdnet.com/topic/security/rss.xml' },
-    'crowdstrike': { name: 'CrowdStrike', url: 'https://www.crowdstrike.com/blog/feed/' },
-    'huntress': { name: 'Huntress', url: 'https://www.huntress.com/blog/rss.xml' },
-    'sentinelone': { name: 'SentinelOne', url: 'https://www.sentinelone.com/labs/feed/' },
-    'microsoft': { name: 'Microsoft', url: 'https://msrc.microsoft.com/blog/feed/' },
-    'mandiant': { name: 'Mandiant', url: 'https://cloud.google.com/blog/topics/threat-intelligence/rss.xml' },
-    'cisa': { name: 'CISA Alerts', url: 'https://www.cisa.gov/news-events/cybersecurity-advisories/rss.xml' },
-    'nist': { name: 'NIST CSRC', url: 'https://csrc.nist.gov/news/rss' },
-    'acsc': { name: 'ACSC (AU)', url: 'https://www.cyber.gov.au/about-us/advisories-and-alerts/rss.xml' }
+    'hackernews': { name: 'The Hacker News', url: 'https://feeds.feedburner.com/TheHackersNews', home: 'https://thehackernews.com/' },
+    'bleeping': { name: 'BleepingComputer', url: 'https://www.bleepingcomputer.com/feed/', home: 'https://www.bleepingcomputer.com/' },
+    'darkreading': { name: 'Dark Reading', url: 'https://www.darkreading.com/rss.xml', home: 'https://www.darkreading.com/' },
+    'cyberscoop': { name: 'CyberScoop', url: 'https://cyberscoop.com/feed/', home: 'https://cyberscoop.com/' },
+    'securityweek': { name: 'SecurityWeek', url: 'https://www.securityweek.com/feed/', home: 'https://www.securityweek.com/' },
+    'zdnet': { name: 'ZDNet Security', url: 'https://www.zdnet.com/topic/security/rss.xml', home: 'https://www.zdnet.com/topic/security/' },
+    'crowdstrike': { name: 'CrowdStrike', url: 'https://www.crowdstrike.com/blog/feed/', home: 'https://www.crowdstrike.com/blog/' },
+    'huntress': { name: 'Huntress', url: 'https://www.huntress.com/blog/rss.xml', home: 'https://www.huntress.com/blog/' },
+    'sentinelone': { name: 'SentinelOne', url: 'https://www.sentinelone.com/labs/feed/', home: 'https://www.sentinelone.com/labs/' },
+    'microsoft': { name: 'Microsoft', url: 'https://msrc.microsoft.com/blog/feed/', home: 'https://msrc.microsoft.com/blog/' },
+    'mandiant': { name: 'Mandiant', url: 'https://cloud.google.com/blog/topics/threat-intelligence/rss.xml', home: 'https://cloud.google.com/blog/topics/threat-intelligence/' },
+    'cisa': { name: 'CISA Alerts', url: 'https://www.cisa.gov/news-events/cybersecurity-advisories/rss.xml', home: 'https://www.cisa.gov/' },
+    'nist': { name: 'NIST CSRC', url: 'https://csrc.nist.gov/news/rss', home: 'https://csrc.nist.gov/' },
+    'acsc': { name: 'ACSC (AU)', url: 'https://www.cyber.gov.au/about-us/advisories-and-alerts/rss.xml', home: 'https://www.cyber.gov.au/' }
 };
 
 const CVE_API = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
@@ -449,16 +449,16 @@ function renderDiscovery(results, query) {
     discoveryView.appendChild(summaryCard);
 
     // Results Link Sections
+    if (results.news.length > 0) {
+        discoveryView.appendChild(createDiscoverySection('Related Security News (Last 3 Months)', results.news, 'news'));
+    }
+
     if (results.cves.length > 0) {
         discoveryView.appendChild(createDiscoverySection('Vulnerabilities (CVEs)', results.cves, 'cve'));
     }
 
     if (results.breaches.length > 0) {
         discoveryView.appendChild(createDiscoverySection('Data Breaches & Leaks', results.breaches, 'breach'));
-    }
-
-    if (results.news.length > 0) {
-        discoveryView.appendChild(createDiscoverySection('Related Security News', results.news, 'news'));
     }
 
     if (totalCount === 0) {
@@ -510,10 +510,22 @@ function createDiscoverySection(title, items, type) {
         let itemTitle = item.title || item.id;
         let meta = item.source || (item.score ? `CVSS: ${item.score}` : '');
 
-        link.innerHTML = `
+        // function to truncate or clean description - reusing existing helper logic but for inside search item
+        if (type === 'cve' && item.description) {
+            let cleanDesc = cleanDescription(item.description, 120);
+            link.innerHTML = `
+            <div class="link-left">
+                <span class="link-title">${itemTitle}</span>
+                <span class="link-desc-mini">${cleanDesc}</span>
+            </div>
+            <span class="link-meta">${meta}</span>
+        `;
+        } else {
+            link.innerHTML = `
             <span class="link-title">${itemTitle}</span>
             <span class="link-meta">${meta}</span>
         `;
+        }
         container.appendChild(link);
     });
 

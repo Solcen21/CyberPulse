@@ -306,16 +306,18 @@ async function fetchSidebarFeed(providerId, container) {
         if (data.status === 'ok' && data.items.length > 0) {
             container.innerHTML = '';
             data.items.slice(0, 3).forEach(item => {
-                const itemEl = document.createElement('a');
+                const itemEl = document.createElement('div');
                 itemEl.className = 'feed-item';
-                itemEl.href = item.link;
-                itemEl.target = '_blank';
-                itemEl.onclick = (e) => e.stopPropagation();
 
                 const date = new Date(item.pubDate).toLocaleDateString([], { month: 'short', day: 'numeric' });
                 itemEl.innerHTML = `
-                    <div class="feed-item-title">${item.title}</div>
-                    <div class="feed-item-date">${date}</div>
+                    <div class="feed-item-content">
+                        <a href="${item.link}" target="_blank" class="feed-link-title">${item.title}</a>
+                        <div class="feed-meta">
+                            <span class="feed-date">${date}</span>
+                            <a href="${item.link}" target="_blank" class="feed-external-link">🔗 Open</a>
+                        </div>
+                    </div>
                 `;
                 container.appendChild(itemEl);
             });
@@ -334,31 +336,89 @@ const discoveryView = document.getElementById('discoveryView');
 const backToNewsBtn = document.getElementById('backToNews');
 const mainTitle = document.querySelector('.filter-bar h2');
 
-function handleSearch() {
+async function handleSearch() {
     const query = searchInput.value.trim().toLowerCase();
     if (!query) {
         showNewsView();
         return;
     }
 
-    // Filter across all vectors
-    const foundNews = allNews.filter(item =>
-        item.title.toLowerCase().includes(query) ||
-        item.description.toLowerCase().includes(query) ||
-        item.source.toLowerCase().includes(query)
-    );
+    // visual feedback
+    mainTitle.innerHTML = `Searching for "<span class="query-highlight">${query}</span>"...`;
+    discoveryView.innerHTML = '<div class="skeleton-card"></div><div class="skeleton-card"></div>';
+    newsGrid.style.display = 'none';
+    discoveryView.style.display = 'flex';
+    backToNewsBtn.style.display = 'flex';
 
-    const foundBreaches = allBreaches.filter(item =>
-        item.title.toLowerCase().includes(query) ||
-        item.source.toLowerCase().includes(query)
-    );
+    try {
+        // 1. Live CVE Search
+        const liveCVEs = await searchCVEs(query);
 
-    const foundCVEs = allCVEs.filter(item =>
-        item.id.toLowerCase().includes(query) ||
-        item.description.toLowerCase().includes(query)
-    );
+        // 2. Filter News (Last 3 Months)
+        const threeMonthsAgo = new Date();
+        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
-    renderDiscovery({ news: foundNews, breaches: foundBreaches, cves: foundCVEs }, query);
+        const foundNews = allNews.filter(item => {
+            const itemDate = new Date(item.pubDate);
+            return itemDate >= threeMonthsAgo && (
+                item.title.toLowerCase().includes(query) ||
+                item.description.toLowerCase().includes(query) ||
+                item.source.toLowerCase().includes(query)
+            );
+        });
+
+        // 3. Filter Breaches (Local)
+        const foundBreaches = allBreaches.filter(item =>
+            item.title.toLowerCase().includes(query) ||
+            item.source.toLowerCase().includes(query)
+        );
+
+        // 4. Combine Local CVEs + Live CVEs (Deduplicate by ID)
+        const localCVEMatches = allCVEs.filter(item =>
+            item.id.toLowerCase().includes(query) ||
+            item.description.toLowerCase().includes(query)
+        );
+
+        // Map to ensure unique IDs
+        const cveMap = new Map();
+        localCVEMatches.forEach(c => cveMap.set(c.id, c));
+        liveCVEs.forEach(c => cveMap.set(c.id, c));
+
+        const uniqueCVEs = Array.from(cveMap.values());
+
+        renderDiscovery({ news: foundNews, breaches: foundBreaches, cves: uniqueCVEs }, query);
+
+    } catch (error) {
+        console.error("Search failed:", error);
+        discoveryView.innerHTML = `<div class="discovery-section"><p>Search failed. Please try again.</p></div>`;
+    }
+}
+
+async function searchCVEs(keyword) {
+    if (keyword.length < 3) return []; // optimization
+    try {
+        const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=20`;
+        const res = await fetchWithTimeout(url, { timeout: 10000 });
+        const data = await res.json();
+
+        if (data.vulnerabilities) {
+            return data.vulnerabilities.map(v => {
+                const c = v.cve;
+                const metrics = c.metrics?.cvssMetricV31?.[0] || c.metrics?.cvssMetricV30?.[0] || c.metrics?.cvssMetricV2?.[0];
+                return {
+                    id: c.id,
+                    description: (c.descriptions.find(d => d.lang === 'en')?.value || 'No description'),
+                    score: metrics?.cvssData?.baseScore || 0,
+                    link: `https://nvd.nist.gov/vuln/detail/${c.id}`,
+                    date: c.published
+                };
+            });
+        }
+        return [];
+    } catch (e) {
+        console.warn("Live CVE search error:", e);
+        return [];
+    }
 }
 
 function showNewsView() {
@@ -415,7 +475,7 @@ function generateSearchSummary(results, query) {
     let summary = `Your search for "<strong>${query}</strong>" revealed ${news.length + breaches.length + cves.length} relevant intelligence points. `;
 
     if (cves.length > 0) {
-        summary += `The most critical finding is the presence of <strong>${cves.length} vulnerabilities</strong>. `;
+        summary += `The most critical finding is the presence of <strong>${cves.length} vulnerabilities</strong> (including historical records). `;
     }
 
     if (breaches.length > 0) {
@@ -423,11 +483,13 @@ function generateSearchSummary(results, query) {
     }
 
     if (news.length > 0) {
-        summary += `Recent security reporting suggests active discussion or exploitation regarding this topic.`;
+        summary += `Recent security reporting (last 3 months) suggests active discussion or exploitation regarding this topic.`;
+    } else {
+        summary += `No news from the last 3 months found.`;
     }
 
     if (news.length + breaches.length + cves.length === 0) {
-        summary = `No active threats or discussions were found in our current 24-hour window for "<strong>${query}</strong>". Monitor the live feeds for updates.`;
+        summary = `No active threats or discussions were found within our search parameters (News: 3 Months, CVEs: All Time) for "<strong>${query}</strong>". Monitor the live feeds for updates.`;
     }
 
     return summary;

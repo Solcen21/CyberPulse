@@ -288,13 +288,29 @@ async function initSidebarIntelligence() {
     const dropdowns = document.querySelectorAll('.provider-dropdown');
     dropdowns.forEach(dropdown => {
         const header = dropdown.querySelector('.provider-header');
+        const providerId = dropdown.dataset.provider;
+
+        // Inject Direct Link
+        const feedConfig = SIDEBAR_FEEDS[providerId];
+        const nameSpan = header.querySelector('span:not(.dropdown-icon)');
+
+        if (nameSpan && feedConfig && feedConfig.home) {
+            const link = document.createElement('a');
+            link.href = feedConfig.home;
+            link.target = "_blank";
+            link.className = "direct-link-icon";
+            link.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>';
+            link.onclick = (e) => e.stopPropagation();
+            link.title = `Visit ${feedConfig.name}`;
+            nameSpan.appendChild(link);
+        }
+
         header.onclick = async () => {
             const isOpen = dropdown.classList.toggle('open');
             if (isOpen) {
-                const provider = dropdown.dataset.provider;
                 const feedContainer = dropdown.querySelector('.provider-feed');
                 if (feedContainer.children.length === 0) {
-                    await fetchSidebarFeed(provider, feedContainer);
+                    await fetchSidebarFeed(providerId, feedContainer);
                 }
             }
         };

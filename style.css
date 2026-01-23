@@ -338,6 +338,23 @@ header {
     color: var(--primary-color);
 }
 
+.direct-link-icon {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    color: var(--text-muted);
+    opacity: 0.5;
+    transition: all 0.2s ease;
+    padding: 2px;
+    border-radius: 4px;
+}
+
+.direct-link-icon:hover {
+    color: var(--secondary-color);
+    background: rgba(0, 212, 255, 0.1);
+    opacity: 1;
+}
+
 .provider-dropdown.open {
     background: rgba(15, 18, 28, 0.8);
     border-color: var(--primary-color);

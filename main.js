@@ -436,6 +436,8 @@ async function handleSearch() {
         console.error("Search failed:", error);
         discoveryView.innerHTML = `<div class="discovery-section"><p>Search failed. Please try again.</p></div>`;
     }
+}
+
 async function searchCVEs(keyword, timeframe = '6m') {
     if (keyword.length < 3) return []; // optimization
     try {

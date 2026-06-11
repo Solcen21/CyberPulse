@@ -782,16 +782,20 @@ function initSidebarCollapsing() {
     }
 }
 
-// --- X / Twitter Intel Feed via Nitter RSS ---
+// --- Reddit Community Feed ---
 
-const NITTER_INSTANCES = [
-    'https://nitter.privacydev.net',
-    'https://nitter.poast.org',
-    'https://nitter.net'
-];
+const REDDIT_FEEDS = {
+    'netsec':         { url: 'https://www.reddit.com/r/netsec/.rss',           label: 'r/netsec' },
+    'cybersecurity':  { url: 'https://www.reddit.com/r/cybersecurity/.rss',    label: 'r/cybersecurity' },
+    'hacking':        { url: 'https://www.reddit.com/r/hacking/.rss',          label: 'r/hacking' },
+    'malware':        { url: 'https://www.reddit.com/r/Malware/.rss',          label: 'r/Malware' },
+    'AskNetsec':      { url: 'https://www.reddit.com/r/AskNetsec/.rss',        label: 'r/AskNetsec' },
+    'darkweb':        { url: 'https://www.reddit.com/r/darkweb/.rss',          label: 'r/darkweb' },
+    'ReverseEngineering': { url: 'https://www.reddit.com/r/ReverseEngineering/.rss', label: 'r/ReverseEngineering' }
+};
 
-let activeXTag = 'cybersecurity';
-let xFeedCache = {};
+let activeRedditSub = 'netsec';
+let redditFeedCache = {};
 
 function timeAgo(dateStr) {
     const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
@@ -801,97 +805,78 @@ function timeAgo(dateStr) {
     return `${Math.floor(diff / 86400)}d`;
 }
 
-function getInitials(handle) {
-    return handle.replace('@', '').substring(0, 2).toUpperCase();
+function getInitials(name) {
+    return name.replace(/^(r\/|u\/)/, '').substring(0, 2).toUpperCase();
 }
 
 const AVATAR_COLORS = ['#00ff9d', '#00d4ff', '#a55eea', '#ff758f', '#ffb142', '#2bcbba'];
-function avatarColor(handle) {
+function avatarColor(name) {
     let hash = 0;
-    for (let i = 0; i < handle.length; i++) hash = handle.charCodeAt(i) + ((hash << 5) - hash);
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
     return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function linkifyTweet(text) {
-    return text
-        .replace(/(#\w+)/g, '<span class="x-hashtag">$1</span>')
-        .replace(/(@\w+)/g, '<span style="color:var(--primary-color)">$1</span>');
-}
-
-async function fetchXFeed(tag) {
-    if (xFeedCache[tag]) {
-        renderXFeed(xFeedCache[tag]);
+async function fetchRedditFeed(sub) {
+    if (redditFeedCache[sub]) {
+        renderRedditFeed(redditFeedCache[sub]);
         return;
     }
 
     const container = document.getElementById('xFeedContainer');
     container.innerHTML = '<div class="skeleton-item mini"></div><div class="skeleton-item mini" style="margin-top:8px"></div><div class="skeleton-item mini" style="margin-top:8px"></div>';
 
-    const encodedTag = encodeURIComponent('#' + tag);
+    const feed = REDDIT_FEEDS[sub];
+    if (!feed) return;
 
-    for (const instance of NITTER_INSTANCES) {
-        try {
-            const rssUrl = `${instance}/search/rss?f=tweets&q=${encodedTag}`;
-            console.log(`[X Feed] Trying: ${rssUrl}`);
-            const res = await fetchWithTimeout(`${API_BASE}${encodeURIComponent(rssUrl)}`, { timeout: 8000 });
-            const data = await res.json();
-            console.log(`[X Feed] Response from ${instance}:`, data.status, data.items?.length);
+    try {
+        const res = await fetchWithTimeout(`${API_BASE}${encodeURIComponent(feed.url)}`, { timeout: 8000 });
+        const data = await res.json();
 
-            if (data.status === 'ok' && data.items && data.items.length > 0) {
-                const tweets = data.items.slice(0, 12).map(item => ({
-                    handle: item.author ? `@${item.author.replace(/^@/, '')}` : extractHandle(item.title),
-                    text: cleanDescription(item.description || item.title, 180),
-                    link: item.link,
-                    date: item.pubDate
-                }));
-                xFeedCache[tag] = tweets;
-                renderXFeed(tweets);
-                return;
-            }
-        } catch (e) {
-            console.warn(`[X Feed] Instance failed (${instance}):`, e.message);
-            continue;
+        if (data.status === 'ok' && data.items && data.items.length > 0) {
+            const posts = data.items.slice(0, 12).map(item => ({
+                title: item.title,
+                author: item.author ? `u/${item.author.replace(/^u\//, '')}` : feed.label,
+                link: item.link,
+                date: item.pubDate,
+                sub: feed.label
+            }));
+            redditFeedCache[sub] = posts;
+            renderRedditFeed(posts);
+        } else {
+            container.innerHTML = `<div class="x-feed-error">No posts found for ${feed.label}.</div>`;
         }
+    } catch (e) {
+        console.warn(`[Reddit Feed] Failed for ${sub}:`, e.message);
+        container.innerHTML = `<div class="x-feed-error">Could not load ${feed.label}. <a href="https://reddit.com/r/${sub}" target="_blank">View on Reddit →</a></div>`;
     }
-
-    // All instances failed — show helpful message
-    container.innerHTML = `
-        <div class="x-feed-error">
-            Live X feed unavailable — Nitter instances are currently down.<br><br>
-            View manually: <a href="https://x.com/search?q=%23${tag}&f=live" target="_blank">x.com #${tag} →</a>
-        </div>`;
 }
 
-function extractHandle(title) {
-    const match = title && title.match(/^([^:]+):/);
-    return match ? `@${match[1].trim()}` : '@unknown';
-}
-
-function renderXFeed(tweets) {
+function renderRedditFeed(posts) {
     const container = document.getElementById('xFeedContainer');
     container.innerHTML = '';
 
-    if (!tweets || tweets.length === 0) {
-        container.innerHTML = '<div class="x-feed-error">No recent posts found for this hashtag.</div>';
+    if (!posts || posts.length === 0) {
+        container.innerHTML = '<div class="x-feed-error">No posts found.</div>';
         return;
     }
 
-    tweets.forEach(tweet => {
+    posts.forEach(post => {
         const div = document.createElement('div');
         div.className = 'x-tweet-item';
-        div.onclick = () => window.open(tweet.link, '_blank');
+        div.onclick = () => window.open(post.link, '_blank');
 
-        const color = avatarColor(tweet.handle);
-        const initials = getInitials(tweet.handle);
-        const ago = timeAgo(tweet.date);
+        const color = avatarColor(post.sub);
+        const initials = getInitials(post.sub);
+        const ago = timeAgo(post.date);
 
         div.innerHTML = `
             <div class="x-tweet-header">
                 <div class="x-avatar" style="background:${color}; color:#000;">${initials}</div>
-                <span class="x-handle">${tweet.handle}</span>
+                <span class="x-handle" style="color:var(--secondary-color)">${post.sub}</span>
                 <span class="x-time">${ago}</span>
             </div>
-            <div class="x-text">${linkifyTweet(tweet.text)}</div>
+            <div class="x-text" style="color:var(--text-main); font-size:0.8rem;">${post.title}</div>
+            <div class="x-meta"><span style="opacity:0.5">by ${post.author}</span></div>
         `;
         container.appendChild(div);
     });
@@ -903,14 +888,14 @@ function initXFeed() {
         tab.onclick = () => {
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            activeXTag = tab.dataset.tag;
-            fetchXFeed(activeXTag);
+            activeRedditSub = tab.dataset.tag;
+            fetchRedditFeed(activeRedditSub);
         };
     });
-    fetchXFeed(activeXTag);
+    fetchRedditFeed(activeRedditSub);
     setInterval(() => {
-        delete xFeedCache[activeXTag];
-        fetchXFeed(activeXTag);
+        delete redditFeedCache[activeRedditSub];
+        fetchRedditFeed(activeRedditSub);
     }, 5 * 60 * 1000);
 }
 

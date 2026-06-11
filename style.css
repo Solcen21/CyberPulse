@@ -185,7 +185,7 @@ header {
 
 .app-container {
     display: grid;
-    grid-template-columns: 340px 1fr 340px;
+    grid-template-columns: max-content 1fr 340px;
     min-height: calc(100vh - 80px);
 }
 
@@ -200,6 +200,8 @@ header {
     max-height: calc(100vh - 80px);
     -ms-overflow-style: none;
     scrollbar-width: none;
+    min-width: 320px;
+    max-width: 420px;
 }
 
 .briefings-sidebar::-webkit-scrollbar {
@@ -331,6 +333,8 @@ header {
     font-size: 0.9rem;
     color: var(--text-main);
     transition: all 0.2s ease;
+    white-space: nowrap;
+    gap: 12px;
 }
 
 .provider-header:hover {
@@ -403,6 +407,7 @@ header {
     overflow: hidden;
     text-decoration: none;
     transition: color 0.2s;
+    white-space: normal;
 }
 
 .feed-link-title:hover {

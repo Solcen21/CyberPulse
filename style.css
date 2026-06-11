@@ -507,6 +507,30 @@ header {
     display: block;
 }
 
+#section-xfeed.open .section-content {
+    max-height: 480px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#section-xfeed.open .section-content::-webkit-scrollbar {
+    display: none;
+}
+
+#section-critical.open .section-content,
+#section-recent.open .section-content {
+    max-height: 400px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#section-critical.open .section-content::-webkit-scrollbar,
+#section-recent.open .section-content::-webkit-scrollbar {
+    display: none;
+}
+
 .section-desc {
     font-size: 0.7rem;
     color: var(--text-muted);

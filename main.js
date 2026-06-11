@@ -89,7 +89,8 @@ async function loadIntelligence() {
     // Each function handles its own rendering as soon as it's ready.
     fetchNews();
     fetchBreaches();
-    fetchCVEs();
+    // Delay CVE fetch by 2s to avoid NVD rate-limiting when news/breach fetches also fire
+    setTimeout(fetchCVEs, 2000);
 }
 
 async function fetchNews() {
@@ -831,11 +832,13 @@ async function fetchXFeed(tag) {
     for (const instance of NITTER_INSTANCES) {
         try {
             const rssUrl = `${instance}/search/rss?f=tweets&q=${encodedTag}`;
+            console.log(`[X Feed] Trying: ${rssUrl}`);
             const res = await fetchWithTimeout(`${API_BASE}${encodeURIComponent(rssUrl)}`, { timeout: 8000 });
             const data = await res.json();
+            console.log(`[X Feed] Response from ${instance}:`, data.status, data.items?.length);
 
             if (data.status === 'ok' && data.items && data.items.length > 0) {
-                const tweets = data.items.slice(0, 8).map(item => ({
+                const tweets = data.items.slice(0, 12).map(item => ({
                     handle: item.author ? `@${item.author.replace(/^@/, '')}` : extractHandle(item.title),
                     text: cleanDescription(item.description || item.title, 180),
                     link: item.link,
@@ -846,6 +849,7 @@ async function fetchXFeed(tag) {
                 return;
             }
         } catch (e) {
+            console.warn(`[X Feed] Instance failed (${instance}):`, e.message);
             continue;
         }
     }
@@ -853,8 +857,8 @@ async function fetchXFeed(tag) {
     // All instances failed — show helpful message
     container.innerHTML = `
         <div class="x-feed-error">
-            Live X feed unavailable — Nitter instances may be down.<br>
-            View manually at <a href="https://x.com/search?q=%23${tag}&f=live" target="_blank">x.com/search #${tag}</a>
+            Live X feed unavailable — Nitter instances are currently down.<br><br>
+            View manually: <a href="https://x.com/search?q=%23${tag}&f=live" target="_blank">x.com #${tag} →</a>
         </div>`;
 }
 

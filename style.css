@@ -185,7 +185,7 @@ header {
 
 .app-container {
     display: grid;
-    grid-template-columns: 280px 1fr 340px;
+    grid-template-columns: 340px 1fr 340px;
     min-height: calc(100vh - 80px);
 }
 
@@ -397,8 +397,8 @@ header {
     line-height: 1.4;
     margin-bottom: 3px;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-decoration: none;
@@ -916,4 +916,85 @@ footer {
     .logo h1 {
         font-size: 1.2rem;
     }
+}
+
+/* ==========================================================================
+   Category Filters & Color-Coded Tags
+   ========================================================================== */
+
+.category-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 2rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(0, 255, 157, 0.05);
+}
+
+.filter-btn {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(0, 255, 157, 0.15);
+    color: var(--text-muted);
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    box-shadow: 0 0 10px rgba(0, 255, 157, 0.15);
+}
+
+.filter-btn.active {
+    background: rgba(0, 255, 157, 0.1);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    box-shadow: 0 0 12px rgba(0, 255, 157, 0.25);
+}
+
+/* Color-Coded Article Tags */
+.card-tag.tag-vulnerability {
+    color: #ff6b6b;
+    border-color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.08);
+}
+.card-tag.tag-breach {
+    color: #ff758f;
+    border-color: #ff758f;
+    background: rgba(255, 117, 143, 0.08);
+}
+.card-tag.tag-security {
+    color: #00d4ff;
+    border-color: #00d4ff;
+    background: rgba(0, 212, 255, 0.08);
+}
+.card-tag.tag-research {
+    color: #a55eea;
+    border-color: #a55eea;
+    background: rgba(165, 94, 234, 0.08);
+}
+.card-tag.tag-investigation {
+    color: #ffb142;
+    border-color: #ffb142;
+    background: rgba(255, 177, 66, 0.08);
+}
+.card-tag.tag-global {
+    color: #2bcbba;
+    border-color: #2bcbba;
+    background: rgba(43, 203, 186, 0.08);
+}
+.card-tag.tag-industry {
+    color: #45aaf2;
+    border-color: #45aaf2;
+    background: rgba(69, 170, 242, 0.08);
+}
+.card-tag.tag-enterprise {
+    color: #00ff9d;
+    border-color: #00ff9d;
+    background: rgba(0, 255, 157, 0.08);
 }

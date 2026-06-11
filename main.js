@@ -47,10 +47,12 @@ const cveRecentList = document.getElementById('cveRecent');
 const searchInput = document.getElementById('newsSearch');
 const searchBtn = document.getElementById('searchBtn');
 const updateStatus = document.getElementById('update-status');
+const categoryFilters = document.getElementById('categoryFilters');
 
 let allNews = [];
 let allBreaches = [];
 let allCVEs = [];
+let currentTagFilter = 'all';
 
 // --- Helpers ---
 
@@ -100,14 +102,25 @@ async function fetchNews() {
         const results = await Promise.all(promises);
         allNews = results.flat().sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
-        const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-        const recent = allNews.filter(item => new Date(item.pubDate) > fortyEightHoursAgo);
-
-        renderNews(recent.length > 0 ? recent.slice(0, 25) : allNews.slice(0, 15));
+        filterAndRenderNews();
         updateStatusText();
     } catch (err) {
         console.error("News fetch failed:", err);
     }
+}
+
+function filterAndRenderNews() {
+    let itemsToRender = allNews;
+    
+    if (currentTagFilter === 'all') {
+        const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+        const recent = allNews.filter(item => new Date(item.pubDate) > fortyEightHoursAgo);
+        itemsToRender = recent.length > 0 ? recent.slice(0, 25) : allNews.slice(0, 15);
+    } else {
+        itemsToRender = allNews.filter(item => item.tag.toLowerCase() === currentTagFilter.toLowerCase()).slice(0, 25);
+    }
+
+    renderNews(itemsToRender);
 }
 
 async function fetchBreaches() {
@@ -208,9 +221,10 @@ function renderNews(newsItems) {
         const card = document.createElement('div');
         card.className = 'news-card';
         const dateString = new Date(item.pubDate).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const tagClass = 'tag-' + item.tag.toLowerCase();
 
         card.innerHTML = `
-            <div class=\"card-tag\">${item.tag}</div>
+            <div class="card-tag ${tagClass}">${item.tag}</div>
             <h3>${item.title}</h3>
             <div class=\"card-content\">
                 <p class=\"desc-short\">${cleanDescription(item.description, 150)}</p>
@@ -371,6 +385,7 @@ async function handleSearch() {
     mainTitle.innerHTML = `Searching for "<span class="query-highlight">${query}</span>"...`;
     discoveryView.innerHTML = '<div class="skeleton-card"></div><div class="skeleton-card"></div>';
     newsGrid.style.display = 'none';
+    categoryFilters.style.display = 'none';
     discoveryView.style.display = 'flex';
     backToNewsBtn.style.display = 'flex';
 
@@ -448,6 +463,7 @@ async function searchCVEs(keyword) {
 function showNewsView() {
     discoveryView.style.display = 'none';
     newsGrid.style.display = 'grid';
+    categoryFilters.style.display = 'flex';
     backToNewsBtn.style.display = 'none';
     mainTitle.innerHTML = 'Latest News <span class="time-label">(Last 24 Hours)</span>';
 }
@@ -584,7 +600,20 @@ installBtn.addEventListener('click', async () => {
     installBtn.style.display = 'none';
 });
 
+function initCategoryFilters() {
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    filterButtons.forEach(btn => {
+        btn.onclick = () => {
+            filterButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTagFilter = btn.dataset.category;
+            filterAndRenderNews();
+        };
+    });
+}
+
 // --- Start ---
 loadIntelligence();
 initSidebarIntelligence();
+initCategoryFilters();
 setInterval(loadIntelligence, 15 * 60 * 1000);

@@ -50,10 +50,15 @@
     </header>
 
     <div class="app-container">
-        <aside class="briefings-sidebar">
+        <aside class="briefings-sidebar" id="briefingsSidebar">
             <div class="sidebar-header">
-                <h3>Threat Briefings</h3>
-                <p>Official Intelligence & Advisories</p>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+                    <div>
+                        <h3>Threat Briefings</h3>
+                        <p>Official Intelligence & Advisories</p>
+                    </div>
+                    <button id="collapseLeftBtn" class="sidebar-toggle-btn" title="Collapse Sidebar">◀</button>
+                </div>
             </div>
             <div class="briefing-group">
                 <label>News Outlets</label>
@@ -229,7 +234,16 @@
             </div>
         </main>
 
-        <aside class="intelligence-right">
+        <aside class="intelligence-right" id="intelligenceRight">
+            <div class="sidebar-header" style="border-bottom: 1px solid var(--border-color); padding: 1.5rem 1.5rem 1rem 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%;">
+                    <div>
+                        <h3>System Intelligence</h3>
+                        <p>CVEs & Data Breach Tracker</p>
+                    </div>
+                    <button id="collapseRightBtn" class="sidebar-toggle-btn" title="Collapse Sidebar">▶</button>
+                </div>
+            </div>
             <!-- Top 10 CVEs -->
             <div class="collapsible-section open" id="section-critical">
                 <div class="section-header" onclick="toggleSection('section-critical')">
@@ -274,6 +288,9 @@
             </div>
         </aside>
     </div>
+
+    <button id="expandLeftBtn" class="floating-expand-btn left" style="display: none;" title="Expand Left Sidebar">▶</button>
+    <button id="expandRightBtn" class="floating-expand-btn right" style="display: none;" title="Expand Right Sidebar">◀</button>
 
     <footer>
         <p>&copy; 2026 CyberPulse Security Intelligence. Data sourced from major security bulletins.</p>

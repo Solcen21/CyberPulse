@@ -53,6 +53,8 @@ let allNews = [];
 let allBreaches = [];
 let allCVEs = [];
 let currentTagFilter = 'all';
+let currentSearchQuery = '';
+let currentCveTimeframe = '6m';
 
 // --- Helpers ---
 
@@ -381,6 +383,9 @@ async function handleSearch() {
         return;
     }
 
+    currentSearchQuery = query;
+    currentCveTimeframe = '6m'; // Reset to default 6 months for new search
+
     // visual feedback
     mainTitle.innerHTML = `Searching for "<span class="query-highlight">${query}</span>"...`;
     discoveryView.innerHTML = '<div class="skeleton-card"></div><div class="skeleton-card"></div>';
@@ -390,8 +395,8 @@ async function handleSearch() {
     backToNewsBtn.style.display = 'flex';
 
     try {
-        // 1. Live CVE Search
-        const liveCVEs = await searchCVEs(query);
+        // 1. Live CVE Search targeting timeframe
+        const liveCVEs = await searchCVEs(query, currentCveTimeframe);
 
         // 2. Filter News (Last 3 Months)
         const threeMonthsAgo = new Date();
@@ -431,34 +436,78 @@ async function handleSearch() {
         console.error("Search failed:", error);
         discoveryView.innerHTML = `<div class="discovery-section"><p>Search failed. Please try again.</p></div>`;
     }
-}
-
-async function searchCVEs(keyword) {
+async function searchCVEs(keyword, timeframe = '6m') {
     if (keyword.length < 3) return []; // optimization
     try {
-        const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=20`;
-        const res = await fetchWithTimeout(url, { timeout: 10000 });
-        const data = await res.json();
+        // Step 1: Query NVD metadata to get totalResults count
+        const initialUrl = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=1`;
+        const initialRes = await fetchWithTimeout(initialUrl, { timeout: 10000 });
+        const initialData = await initialRes.json();
+        const totalResults = initialData.totalResults || 0;
 
-        if (data.vulnerabilities) {
-            return data.vulnerabilities.map(v => {
-                const c = v.cve;
-                const metrics = c.metrics?.cvssMetricV31?.[0] || c.metrics?.cvssMetricV30?.[0] || c.metrics?.cvssMetricV2?.[0];
-                return {
-                    id: c.id,
-                    description: (c.descriptions.find(d => d.lang === 'en')?.value || 'No description'),
-                    score: metrics?.cvssData?.baseScore || 0,
-                    link: `https://nvd.nist.gov/vuln/detail/${c.id}`,
-                    date: c.published
-                };
-            });
+        if (totalResults === 0) return [];
+
+        let vulnerabilities = [];
+
+        if (timeframe === 'all-old') {
+            // Fetch oldest first starting at 0
+            const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=50&startIndex=0`;
+            const res = await fetchWithTimeout(url, { timeout: 10000 });
+            const data = await res.json();
+            if (data.vulnerabilities) {
+                vulnerabilities = data.vulnerabilities.map(mapNvdCve);
+            }
+        } else if (timeframe === 'all-new') {
+            // Fetch newest first by querying the end of the list
+            const fetchCount = Math.min(50, totalResults);
+            const startIndex = Math.max(0, totalResults - fetchCount);
+            const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=${fetchCount}&startIndex=${startIndex}`;
+            const res = await fetchWithTimeout(url, { timeout: 10000 });
+            const data = await res.json();
+            if (data.vulnerabilities) {
+                vulnerabilities = data.vulnerabilities.map(mapNvdCve).reverse();
+            }
+        } else {
+            // Recent timeframes: '6m' or '12m'
+            // We fetch the latest 100 results and filter them client-side by publication date
+            const fetchCount = Math.min(100, totalResults);
+            const startIndex = Math.max(0, totalResults - fetchCount);
+            const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=${fetchCount}&startIndex=${startIndex}`;
+            const res = await fetchWithTimeout(url, { timeout: 10000 });
+            const data = await res.json();
+            if (data.vulnerabilities) {
+                const now = Date.now();
+                const limitMonths = timeframe === '6m' ? 6 : 12;
+                const limitMs = limitMonths * 30 * 24 * 60 * 60 * 1000;
+
+                vulnerabilities = data.vulnerabilities
+                    .map(mapNvdCve)
+                    .reverse()
+                    .filter(c => {
+                        const pubTime = new Date(c.date).getTime();
+                        return (now - pubTime) <= limitMs;
+                    });
+            }
         }
-        return [];
+        return vulnerabilities;
     } catch (e) {
         console.warn("Live CVE search error:", e);
         return [];
     }
 }
+
+function mapNvdCve(v) {
+    const c = v.cve;
+    const metrics = c.metrics?.cvssMetricV31?.[0] || c.metrics?.cvssMetricV30?.[0] || c.metrics?.cvssMetricV2?.[0];
+    return {
+        id: c.id,
+        description: (c.descriptions.find(d => d.lang === 'en')?.value || 'No description'),
+        score: metrics?.cvssData?.baseScore || 0,
+        link: `https://nvd.nist.gov/vuln/detail/${c.id}`,
+        date: c.published
+    };
+}
+
 
 function showNewsView() {
     discoveryView.style.display = 'none';
@@ -493,9 +542,8 @@ function renderDiscovery(results, query) {
         discoveryView.appendChild(createDiscoverySection('Related Security News (Last 3 Months)', results.news, 'news'));
     }
 
-    if (results.cves.length > 0) {
-        discoveryView.appendChild(createDiscoverySection('Vulnerabilities (CVEs)', results.cves, 'cve'));
-    }
+    // Always append CVE section to allow timeframe switching
+    discoveryView.appendChild(createCveDiscoverySection('Vulnerabilities (CVEs)', results.cves));
 
     if (results.breaches.length > 0) {
         discoveryView.appendChild(createDiscoverySection('Data Breaches & Leaks', results.breaches, 'breach'));
@@ -612,8 +660,128 @@ function initCategoryFilters() {
     });
 }
 
+function createCveDiscoverySection(title, items) {
+    const section = document.createElement('div');
+    section.className = 'discovery-section';
+    section.innerHTML = `
+        <div class="discovery-section-header">
+            <h4>${title}</h4>
+            <div class="cve-timeframe-selector">
+                <label for="cveTimeframe">Timeframe:</label>
+                <select id="cveTimeframe">
+                    <option value="6m" ${currentCveTimeframe === '6m' ? 'selected' : ''}>Last 6 Months</option>
+                    <option value="12m" ${currentCveTimeframe === '12m' ? 'selected' : ''}>Last 12 Months</option>
+                    <option value="all-new" ${currentCveTimeframe === 'all-new' ? 'selected' : ''}>All Time (Newest)</option>
+                    <option value="all-old" ${currentCveTimeframe === 'all-old' ? 'selected' : ''}>All Time (Oldest)</option>
+                </select>
+            </div>
+        </div>
+        <div class="discovery-links" id="cveDiscoveryLinks"></div>
+    `;
+
+    const container = section.querySelector('#cveDiscoveryLinks');
+
+    if (items.length > 0) {
+        items.slice(0, 30).forEach(item => {
+            const link = document.createElement('a');
+            link.className = 'discovery-link-item';
+            link.href = item.link;
+            link.target = '_blank';
+
+            let itemTitle = item.id;
+            let meta = item.score ? `CVSS: ${item.score.toFixed(1)}` : '';
+            let cleanDesc = cleanDescription(item.description, 120);
+
+            link.innerHTML = `
+                <div class="link-left">
+                    <span class="link-title">${itemTitle}</span>
+                    <span class="link-desc-mini">${cleanDesc}</span>
+                </div>
+                <span class="link-meta">${meta}</span>
+            `;
+            container.appendChild(link);
+        });
+    } else {
+        container.innerHTML = '<div class="discovery-link-item" style="cursor: default; background: transparent; justify-content: center; color: var(--text-muted);">No recent CVEs found for this timeframe.</div>';
+    }
+
+    const select = section.querySelector('#cveTimeframe');
+    select.onchange = async () => {
+        currentCveTimeframe = select.value;
+        await refreshCveSearch();
+    };
+
+    return section;
+}
+
+async function refreshCveSearch() {
+    const cveContainer = document.querySelector('#cveDiscoveryLinks');
+    if (!cveContainer) return;
+
+    cveContainer.innerHTML = '<div class="skeleton-item" style="height: 50px; margin-bottom: 10px;"></div><div class="skeleton-item" style="height: 50px;"></div>';
+
+    const cves = await searchCVEs(currentSearchQuery, currentCveTimeframe);
+
+    cveContainer.innerHTML = '';
+
+    if (cves.length > 0) {
+        cves.slice(0, 30).forEach(item => {
+            const link = document.createElement('a');
+            link.className = 'discovery-link-item';
+            link.href = item.link;
+            link.target = '_blank';
+
+            let itemTitle = item.id;
+            let meta = item.score ? `CVSS: ${item.score.toFixed(1)}` : '';
+            let cleanDesc = cleanDescription(item.description, 120);
+
+            link.innerHTML = `
+                <div class="link-left">
+                    <span class="link-title">${itemTitle}</span>
+                    <span class="link-desc-mini">${cleanDesc}</span>
+                </div>
+                <span class="link-meta">${meta}</span>
+            `;
+            cveContainer.appendChild(link);
+        });
+    } else {
+        cveContainer.innerHTML = '<div class="discovery-link-item" style="cursor: default; background: transparent; justify-content: center; color: var(--text-muted);">No CVEs found for this timeframe.</div>';
+    }
+}
+
+function initSidebarCollapsing() {
+    const container = document.querySelector('.app-container');
+    const collapseLeftBtn = document.getElementById('collapseLeftBtn');
+    const collapseRightBtn = document.getElementById('collapseRightBtn');
+    const expandLeftBtn = document.getElementById('expandLeftBtn');
+    const expandRightBtn = document.getElementById('expandRightBtn');
+
+    if (collapseLeftBtn && expandLeftBtn) {
+        collapseLeftBtn.onclick = () => {
+            container.classList.add('collapsed-left');
+            expandLeftBtn.style.display = 'flex';
+        };
+        expandLeftBtn.onclick = () => {
+            container.classList.remove('collapsed-left');
+            expandLeftBtn.style.display = 'none';
+        };
+    }
+
+    if (collapseRightBtn && expandRightBtn) {
+        collapseRightBtn.onclick = () => {
+            container.classList.add('collapsed-right');
+            expandRightBtn.style.display = 'flex';
+        };
+        expandRightBtn.onclick = () => {
+            container.classList.remove('collapsed-right');
+            expandRightBtn.style.display = 'none';
+        };
+    }
+}
+
 // --- Start ---
 loadIntelligence();
 initSidebarIntelligence();
 initCategoryFilters();
+initSidebarCollapsing();
 setInterval(loadIntelligence, 15 * 60 * 1000);

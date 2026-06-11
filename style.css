@@ -1003,3 +1003,145 @@ footer {
     border-color: #00ff9d;
     background: rgba(0, 255, 157, 0.08);
 }
+
+/* ==========================================================================
+   Sidebar Collapse & Expand System
+   ========================================================================== */
+
+.app-container {
+    transition: grid-template-columns 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.briefings-sidebar, .intelligence-right {
+    transition: opacity 0.2s ease, width 0.3s ease, padding 0.3s ease;
+}
+
+.app-container.collapsed-left {
+    grid-template-columns: 0px 1fr 340px;
+}
+.app-container.collapsed-left .briefings-sidebar {
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+    padding: 0 !important;
+    border-right: none;
+}
+
+.app-container.collapsed-right {
+    grid-template-columns: max-content 1fr 0px;
+}
+.app-container.collapsed-right .intelligence-right {
+    opacity: 0;
+    pointer-events: none;
+    overflow: hidden;
+    padding: 0 !important;
+    border-left: none;
+}
+
+.app-container.collapsed-left.collapsed-right {
+    grid-template-columns: 0px 1fr 0px;
+}
+
+/* Sidebar Toggle Buttons */
+.sidebar-toggle-btn {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(0, 255, 157, 0.2);
+    color: var(--text-muted);
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.sidebar-toggle-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: rgba(0, 255, 157, 0.05);
+    box-shadow: 0 0 8px rgba(0, 255, 157, 0.1);
+}
+
+/* Floating Expand Tabs */
+.floating-expand-btn {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(15, 18, 28, 0.95);
+    border: 1px solid var(--border-color);
+    color: var(--primary-color);
+    width: 24px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 150;
+    transition: all 0.2s ease;
+    font-size: 0.8rem;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+}
+
+.floating-expand-btn.left {
+    left: 0;
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+}
+
+.floating-expand-btn.right {
+    right: 0;
+    border-right: none;
+    border-radius: 8px 0 0 8px;
+}
+
+.floating-expand-btn:hover {
+    background: var(--primary-color);
+    color: #000;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.3);
+}
+
+/* Discovery Section CVE Timeframe Dropdown */
+.discovery-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.discovery-section-header h4 {
+    margin-bottom: 0 !important;
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+}
+
+.cve-timeframe-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.cve-timeframe-selector select {
+    background: rgba(15, 18, 28, 0.9);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cve-timeframe-selector select:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 8px rgba(0, 255, 157, 0.1);
+}

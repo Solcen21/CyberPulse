@@ -781,9 +781,139 @@ function initSidebarCollapsing() {
     }
 }
 
+// --- X / Twitter Intel Feed via Nitter RSS ---
+
+const NITTER_INSTANCES = [
+    'https://nitter.privacydev.net',
+    'https://nitter.poast.org',
+    'https://nitter.net'
+];
+
+let activeXTag = 'cybersecurity';
+let xFeedCache = {};
+
+function timeAgo(dateStr) {
+    const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
+    if (diff < 60) return `${Math.floor(diff)}s`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return `${Math.floor(diff / 86400)}d`;
+}
+
+function getInitials(handle) {
+    return handle.replace('@', '').substring(0, 2).toUpperCase();
+}
+
+const AVATAR_COLORS = ['#00ff9d', '#00d4ff', '#a55eea', '#ff758f', '#ffb142', '#2bcbba'];
+function avatarColor(handle) {
+    let hash = 0;
+    for (let i = 0; i < handle.length; i++) hash = handle.charCodeAt(i) + ((hash << 5) - hash);
+    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function linkifyTweet(text) {
+    return text
+        .replace(/(#\w+)/g, '<span class="x-hashtag">$1</span>')
+        .replace(/(@\w+)/g, '<span style="color:var(--primary-color)">$1</span>');
+}
+
+async function fetchXFeed(tag) {
+    if (xFeedCache[tag]) {
+        renderXFeed(xFeedCache[tag]);
+        return;
+    }
+
+    const container = document.getElementById('xFeedContainer');
+    container.innerHTML = '<div class="skeleton-item mini"></div><div class="skeleton-item mini" style="margin-top:8px"></div><div class="skeleton-item mini" style="margin-top:8px"></div>';
+
+    const encodedTag = encodeURIComponent('#' + tag);
+
+    for (const instance of NITTER_INSTANCES) {
+        try {
+            const rssUrl = `${instance}/search/rss?f=tweets&q=${encodedTag}`;
+            const res = await fetchWithTimeout(`${API_BASE}${encodeURIComponent(rssUrl)}`, { timeout: 8000 });
+            const data = await res.json();
+
+            if (data.status === 'ok' && data.items && data.items.length > 0) {
+                const tweets = data.items.slice(0, 8).map(item => ({
+                    handle: item.author ? `@${item.author.replace(/^@/, '')}` : extractHandle(item.title),
+                    text: cleanDescription(item.description || item.title, 180),
+                    link: item.link,
+                    date: item.pubDate
+                }));
+                xFeedCache[tag] = tweets;
+                renderXFeed(tweets);
+                return;
+            }
+        } catch (e) {
+            continue;
+        }
+    }
+
+    // All instances failed — show helpful message
+    container.innerHTML = `
+        <div class="x-feed-error">
+            Live X feed unavailable — Nitter instances may be down.<br>
+            View manually at <a href="https://x.com/search?q=%23${tag}&f=live" target="_blank">x.com/search #${tag}</a>
+        </div>`;
+}
+
+function extractHandle(title) {
+    const match = title && title.match(/^([^:]+):/);
+    return match ? `@${match[1].trim()}` : '@unknown';
+}
+
+function renderXFeed(tweets) {
+    const container = document.getElementById('xFeedContainer');
+    container.innerHTML = '';
+
+    if (!tweets || tweets.length === 0) {
+        container.innerHTML = '<div class="x-feed-error">No recent posts found for this hashtag.</div>';
+        return;
+    }
+
+    tweets.forEach(tweet => {
+        const div = document.createElement('div');
+        div.className = 'x-tweet-item';
+        div.onclick = () => window.open(tweet.link, '_blank');
+
+        const color = avatarColor(tweet.handle);
+        const initials = getInitials(tweet.handle);
+        const ago = timeAgo(tweet.date);
+
+        div.innerHTML = `
+            <div class="x-tweet-header">
+                <div class="x-avatar" style="background:${color}; color:#000;">${initials}</div>
+                <span class="x-handle">${tweet.handle}</span>
+                <span class="x-time">${ago}</span>
+            </div>
+            <div class="x-text">${linkifyTweet(tweet.text)}</div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+function initXFeed() {
+    const tabs = document.querySelectorAll('.x-tab');
+    tabs.forEach(tab => {
+        tab.onclick = () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            activeXTag = tab.dataset.tag;
+            fetchXFeed(activeXTag);
+        };
+    });
+    fetchXFeed(activeXTag);
+    setInterval(() => {
+        delete xFeedCache[activeXTag];
+        fetchXFeed(activeXTag);
+    }, 5 * 60 * 1000);
+}
+
 // --- Start ---
 loadIntelligence();
 initSidebarIntelligence();
 initCategoryFilters();
 initSidebarCollapsing();
+initXFeed();
 setInterval(loadIntelligence, 15 * 60 * 1000);

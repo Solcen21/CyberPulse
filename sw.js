@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cyberpulse-v8';
+const CACHE_NAME = 'cyberpulse-v10';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',

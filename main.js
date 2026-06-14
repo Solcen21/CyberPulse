@@ -252,34 +252,37 @@ function updateStatusText() {
 
 // --- Rendering Logic ---
 
+function createNewsCard(item) {
+    const card = document.createElement('div');
+    card.className = 'news-card';
+    const dateString = new Date(item.pubDate).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const tagClass = 'tag-' + item.tag.toLowerCase();
+
+    card.innerHTML = `
+        <div class="card-tag ${tagClass}">${item.tag}</div>
+        <h3>${item.title}</h3>
+        <div class=\"card-content\">
+            <p class=\"desc-short\">${cleanDescription(item.description, 150)}</p>
+            <p class=\"desc-full\">${cleanDescription(item.description, 1000)}</p>
+        </div>
+        <a href=\"${item.link}\" target=\"_blank\" class=\"read-full-btn\" onclick=\"event.stopPropagation()\">Read Full Article →</a>
+        <div class=\"card-footer\">
+            <span class=\"source\">${item.source}</span>
+            <span class=\"time\">${dateString}</span>
+        </div>
+    `;
+
+    card.onclick = () => {
+        document.querySelectorAll('.news-card.expanded').forEach(c => { if (c !== card) c.classList.remove('expanded'); });
+        card.classList.toggle('expanded');
+    };
+
+    return card;
+}
+
 function renderNews(newsItems) {
     newsGrid.innerHTML = '';
-    newsItems.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'news-card';
-        const dateString = new Date(item.pubDate).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const tagClass = 'tag-' + item.tag.toLowerCase();
-
-        card.innerHTML = `
-            <div class="card-tag ${tagClass}">${item.tag}</div>
-            <h3>${item.title}</h3>
-            <div class=\"card-content\">
-                <p class=\"desc-short\">${cleanDescription(item.description, 150)}</p>
-                <p class=\"desc-full\">${cleanDescription(item.description, 1000)}</p>
-            </div>
-            <a href=\"${item.link}\" target=\"_blank\" class=\"read-full-btn\" onclick=\"event.stopPropagation()\">Read Full Article →</a>
-            <div class=\"card-footer\">
-                <span class=\"source\">${item.source}</span>
-                <span class=\"time\">${dateString}</span>
-            </div>
-        `;
-
-        card.onclick = () => {
-            document.querySelectorAll('.news-card.expanded').forEach(c => { if (c !== card) c.classList.remove('expanded'); });
-            card.classList.toggle('expanded');
-        };
-        newsGrid.appendChild(card);
-    });
+    newsItems.forEach(item => newsGrid.appendChild(createNewsCard(item)));
 }
 
 function renderBreaches(breachItems) {
@@ -576,7 +579,7 @@ function renderDiscovery(results, query) {
 
     // Results Link Sections
     if (results.news.length > 0) {
-        discoveryView.appendChild(createDiscoverySection('Related Security News (Last 3 Months)', results.news, 'news'));
+        discoveryView.appendChild(createDiscoverySection('Related Security News (Last 1 Month)', results.news, 'news'));
     }
 
     // Always append CVE section to allow timeframe switching
@@ -623,6 +626,14 @@ function generateSearchSummary(results, query) {
 function createDiscoverySection(title, items, type) {
     const section = document.createElement('div');
     section.className = 'discovery-section';
+
+    if (type === 'news') {
+        section.innerHTML = `<h4>${title}</h4><div class="discovery-news-grid"></div>`;
+        const container = section.querySelector('.discovery-news-grid');
+        items.forEach(item => container.appendChild(createNewsCard(item)));
+        return section;
+    }
+
     section.innerHTML = `<h4>${title}</h4><div class="discovery-links"></div>`;
     const container = section.querySelector('.discovery-links');
 
@@ -697,6 +708,53 @@ function initCategoryFilters() {
     });
 }
 
+function getCveSeverity(score) {
+    if (score >= 9.0) return { label: 'Critical', className: 'sev-critical' };
+    if (score >= 7.0) return { label: 'High', className: 'sev-high' };
+    if (score >= 4.0) return { label: 'Medium', className: 'sev-medium' };
+    if (score > 0) return { label: 'Low', className: 'sev-low' };
+    return { label: 'Unknown', className: 'sev-unknown' };
+}
+
+function buildCveTableRows(items) {
+    return items.map(item => {
+        const sev = getCveSeverity(item.score);
+        const desc = cleanDescription(item.description, 160);
+        const dateStr = item.date ? new Date(item.date).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+        return `
+            <tr onclick="window.open('${item.link}', '_blank')">
+                <td class="cve-table-id"><a href="${item.link}" target="_blank" onclick="event.stopPropagation()">${item.id}</a></td>
+                <td><span class="severity-badge ${sev.className}">${sev.label}${item.score ? ` (${item.score.toFixed(1)})` : ''}</span></td>
+                <td class="cve-table-desc">${desc}</td>
+                <td class="cve-table-date">${dateStr}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function buildCveTable(items) {
+    if (!items || items.length === 0) {
+        return '<div class="discovery-link-item" style="cursor: default; background: transparent; justify-content: center; color: var(--text-muted);">No CVEs found for this timeframe.</div>';
+    }
+    return `
+        <div class="cve-table-wrapper">
+            <table class="cve-table">
+                <thead>
+                    <tr>
+                        <th>CVE ID</th>
+                        <th>Severity</th>
+                        <th>Description</th>
+                        <th>Published</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${buildCveTableRows(items.slice(0, 30))}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
 function createCveDiscoverySection(title, items) {
     const section = document.createElement('div');
     section.className = 'discovery-section';
@@ -713,34 +771,8 @@ function createCveDiscoverySection(title, items) {
                 </select>
             </div>
         </div>
-        <div class="discovery-links" id="cveDiscoveryLinks"></div>
+        <div id="cveDiscoveryLinks">${buildCveTable(items)}</div>
     `;
-
-    const container = section.querySelector('#cveDiscoveryLinks');
-
-    if (items.length > 0) {
-        items.slice(0, 30).forEach(item => {
-            const link = document.createElement('a');
-            link.className = 'discovery-link-item';
-            link.href = item.link;
-            link.target = '_blank';
-
-            let itemTitle = item.id;
-            let meta = item.score ? `CVSS: ${item.score.toFixed(1)}` : '';
-            let cleanDesc = cleanDescription(item.description, 120);
-
-            link.innerHTML = `
-                <div class="link-left">
-                    <span class="link-title">${itemTitle}</span>
-                    <span class="link-desc-mini">${cleanDesc}</span>
-                </div>
-                <span class="link-meta">${meta}</span>
-            `;
-            container.appendChild(link);
-        });
-    } else {
-        container.innerHTML = '<div class="discovery-link-item" style="cursor: default; background: transparent; justify-content: center; color: var(--text-muted);">No recent CVEs found for this timeframe.</div>';
-    }
 
     const select = section.querySelector('#cveTimeframe');
     select.onchange = async () => {
@@ -759,31 +791,7 @@ async function refreshCveSearch() {
 
     const cves = await searchCVEs(currentSearchQuery, currentCveTimeframe);
 
-    cveContainer.innerHTML = '';
-
-    if (cves.length > 0) {
-        cves.slice(0, 30).forEach(item => {
-            const link = document.createElement('a');
-            link.className = 'discovery-link-item';
-            link.href = item.link;
-            link.target = '_blank';
-
-            let itemTitle = item.id;
-            let meta = item.score ? `CVSS: ${item.score.toFixed(1)}` : '';
-            let cleanDesc = cleanDescription(item.description, 120);
-
-            link.innerHTML = `
-                <div class="link-left">
-                    <span class="link-title">${itemTitle}</span>
-                    <span class="link-desc-mini">${cleanDesc}</span>
-                </div>
-                <span class="link-meta">${meta}</span>
-            `;
-            cveContainer.appendChild(link);
-        });
-    } else {
-        cveContainer.innerHTML = '<div class="discovery-link-item" style="cursor: default; background: transparent; justify-content: center; color: var(--text-muted);">No CVEs found for this timeframe.</div>';
-    }
+    cveContainer.innerHTML = buildCveTable(cves);
 }
 
 function initSidebarCollapsing() {

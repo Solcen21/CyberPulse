@@ -639,6 +639,13 @@ main {
     gap: 1.5rem;
 }
 
+.discovery-news-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
 .news-card {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
@@ -1027,6 +1034,11 @@ footer {
     border-color: #00ff9d;
     background: rgba(0, 255, 157, 0.08);
 }
+.card-tag.tag-tooling {
+    color: #ffd166;
+    border-color: #ffd166;
+    background: rgba(255, 209, 102, 0.08);
+}
 
 /* ==========================================================================
    Sidebar Collapse & Expand System
@@ -1310,4 +1322,126 @@ footer {
 
 .x-feed-error a:hover {
     text-decoration: underline;
+}
+/* ==========================================================================
+   CVE Results Table (Discovery / Search)
+   ========================================================================== */
+
+.cve-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.cve-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.cve-table thead th {
+    text-align: left;
+    padding: 10px 14px;
+    background: rgba(0, 255, 157, 0.05);
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.cve-table tbody tr {
+    cursor: pointer;
+    transition: background 0.15s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.cve-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.cve-table tbody tr:hover {
+    background: rgba(0, 255, 157, 0.04);
+}
+
+.cve-table td {
+    padding: 10px 14px;
+    vertical-align: top;
+    color: var(--text-main);
+}
+
+.cve-table-id a {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: var(--primary-color);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.cve-table-id a:hover {
+    text-decoration: underline;
+}
+
+.cve-table-desc {
+    color: var(--text-muted);
+    line-height: 1.5;
+    min-width: 240px;
+}
+
+.cve-table-date {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.severity-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    text-align: center;
+}
+
+.severity-badge.sev-critical {
+    background: #ff4757;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(255, 71, 87, 0.4);
+}
+
+.severity-badge.sev-high {
+    background: #ffa502;
+    color: #1a1a1a;
+}
+
+.severity-badge.sev-medium {
+    background: #eccc68;
+    color: #1a1a1a;
+}
+
+.severity-badge.sev-low {
+    background: #2ed573;
+    color: #1a1a1a;
+}
+
+.severity-badge.sev-unknown {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+
+@media (max-width: 768px) {
+    .cve-table-desc {
+        min-width: 160px;
+        font-size: 0.78rem;
+    }
+    .cve-table thead th,
+    .cve-table td {
+        padding: 8px 8px;
+    }
 }

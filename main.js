@@ -4,12 +4,34 @@ const NEWS_FEEDS = [
     { name: 'Dark Reading', url: 'https://www.darkreading.com/rss.xml', tag: 'Security' },
     { name: 'CyberScoop', url: 'https://cyberscoop.com/feed/', tag: 'Research' },
     { name: 'SecurityWeek', url: 'https://www.securityweek.com/feed/', tag: 'Vulnerability' },
-    { name: 'ZDNet Security', url: 'https://www.zdnet.com/topic/security/rss.xml', tag: 'Security' },
     { name: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/', tag: 'Investigation' },
     { name: 'The Record', url: 'https://therecord.media/feed', tag: 'Global' },
     { name: 'Help Net Security', url: 'https://www.helpnetsecurity.com/feed/', tag: 'Industry' },
-    { name: 'SC Media', url: 'https://www.scmagazine.com/rss.xml', tag: 'Enterprise' }
+    { name: 'SC Media', url: 'https://www.scmagazine.com/rss.xml', tag: 'Enterprise' },
+    { name: 'Sophos News', url: 'https://news.sophos.com/en-us/feed/', tag: 'Research' },
+    { name: 'HackRead', url: 'https://hackread.com/feed/', tag: 'Security' },
+    { name: 'Securelist (Kaspersky)', url: 'https://securelist.com/feed/', tag: 'Research' },
+    { name: 'CSO Online', url: 'https://www.csoonline.com/feed/', tag: 'Enterprise' },
+    // Security tooling vendor blogs
+    { name: 'CrowdStrike', url: 'https://www.crowdstrike.com/blog/feed/', tag: 'Tooling' },
+    { name: 'Tenable', url: 'https://www.tenable.com/blog/feed', tag: 'Tooling' },
+    { name: 'Splunk', url: 'https://www.splunk.com/en_us/blog/security.rss', tag: 'Tooling' },
+    { name: 'SpecterOps (BloodHound)', url: 'https://posts.specterops.io/feed', tag: 'Tooling' },
+    { name: 'Velociraptor (Velocidex)', url: 'https://medium.com/feed/@velocidex', tag: 'Tooling' },
+    { name: 'Rapid7', url: 'https://blog.rapid7.com/rss/', tag: 'Tooling' }
 ];
+
+// Keywords used to filter out general/non-cyber tech articles from broad-tech sources
+const TECH_NOISE_KEYWORDS = [
+    'iphone', 'android', 'samsung galaxy', 'pixel phone', 'macbook', 'windows 11 feature',
+    'gaming', 'playstation', 'xbox', 'nintendo', 'streaming service', 'netflix', 'social media app',
+    'electric vehicle', 'tesla model', 'smart home', 'wearable', 'smartwatch', 'review:'
+];
+
+function isCyberRelevant(item) {
+    const text = `${item.title} ${item.description || ''}`.toLowerCase();
+    return !TECH_NOISE_KEYWORDS.some(kw => text.includes(kw));
+}
 
 const BREACH_FEEDS = [
     { name: 'DataBreaches.net', url: 'https://www.databreaches.net/feed/', tag: 'Leak' },
@@ -22,12 +44,20 @@ const SIDEBAR_FEEDS = {
     'darkreading': { name: 'Dark Reading', url: 'https://www.darkreading.com/rss.xml', home: 'https://www.darkreading.com/' },
     'cyberscoop': { name: 'CyberScoop', url: 'https://cyberscoop.com/feed/', home: 'https://cyberscoop.com/' },
     'securityweek': { name: 'SecurityWeek', url: 'https://www.securityweek.com/feed/', home: 'https://www.securityweek.com/' },
-    'zdnet': { name: 'ZDNet Security', url: 'https://www.zdnet.com/topic/security/rss.xml', home: 'https://www.zdnet.com/topic/security/' },
     'krebs': { name: 'Krebs on Security', url: 'https://krebsonsecurity.com/feed/', home: 'https://krebsonsecurity.com/' },
     'therecord': { name: 'The Record', url: 'https://therecord.media/feed', home: 'https://therecord.media/' },
     'helpnet': { name: 'Help Net Security', url: 'https://www.helpnetsecurity.com/feed/', home: 'https://www.helpnetsecurity.com/' },
     'scmedia': { name: 'SC Media', url: 'https://www.scmagazine.com/rss.xml', home: 'https://www.scmagazine.com/' },
+    'sophos': { name: 'Sophos News', url: 'https://news.sophos.com/en-us/feed/', home: 'https://news.sophos.com/en-us/' },
+    'hackread': { name: 'HackRead', url: 'https://hackread.com/feed/', home: 'https://hackread.com/' },
+    'securelist': { name: 'Securelist (Kaspersky)', url: 'https://securelist.com/feed/', home: 'https://securelist.com/' },
+    'csoonline': { name: 'CSO Online', url: 'https://www.csoonline.com/feed/', home: 'https://www.csoonline.com/' },
     'crowdstrike': { name: 'CrowdStrike', url: 'https://www.crowdstrike.com/blog/feed/', home: 'https://www.crowdstrike.com/blog/' },
+    'tenable': { name: 'Tenable', url: 'https://www.tenable.com/blog/feed', home: 'https://www.tenable.com/blog' },
+    'splunk': { name: 'Splunk Security', url: 'https://www.splunk.com/en_us/blog/security.rss', home: 'https://www.splunk.com/en_us/blog/security.html' },
+    'specterops': { name: 'SpecterOps (BloodHound)', url: 'https://posts.specterops.io/feed', home: 'https://posts.specterops.io/' },
+    'velociraptor': { name: 'Velociraptor', url: 'https://medium.com/feed/@velocidex', home: 'https://medium.com/@velocidex' },
+    'rapid7': { name: 'Rapid7', url: 'https://blog.rapid7.com/rss/', home: 'https://blog.rapid7.com/' },
     'huntress': { name: 'Huntress', url: 'https://www.huntress.com/blog/rss.xml', home: 'https://www.huntress.com/blog/' },
     'sentinelone': { name: 'SentinelOne', url: 'https://www.sentinelone.com/labs/feed/', home: 'https://www.sentinelone.com/labs/' },
     'microsoft': { name: 'Microsoft', url: 'https://msrc.microsoft.com/blog/feed/', home: 'https://msrc.microsoft.com/blog/' },
@@ -98,7 +128,11 @@ async function fetchNews() {
         const promises = NEWS_FEEDS.map(f =>
             fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}`)
                 .then(r => r.json())
-                .then(data => data.status === 'ok' ? data.items.map(item => ({ ...item, source: f.name, tag: f.tag })) : [])
+                .then(data => data.status === 'ok'
+                    ? data.items
+                        .map(item => ({ ...item, source: f.name, tag: f.tag }))
+                        .filter(isCyberRelevant)
+                    : [])
                 .catch(() => [])
         );
 

@@ -69,23 +69,35 @@ const SIDEBAR_FEEDS = {
 
 const CVE_API = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
 const CORS_PROXY = 'https://api.allorigins.win/get?url=';
+const CORS_PROXY_FALLBACK = 'https://corsproxy.io/?url=';
+
+async function fetchViaProxy(url, options = {}) {
+    // Try primary proxy first
+    try {
+        const proxyUrl = `${CORS_PROXY}${encodeURIComponent(url)}`;
+        const res = await fetchWithTimeout(proxyUrl, { ...options, timeout: options.timeout || 20000 });
+        const json = await res.json();
+        if (json && json.contents) return json.contents;
+    } catch (e) {
+        // fall through to backup
+    }
+    // Fallback proxy — returns raw text directly
+    const fallbackUrl = `${CORS_PROXY_FALLBACK}${encodeURIComponent(url)}`;
+    const res = await fetchWithTimeout(fallbackUrl, { ...options, timeout: options.timeout || 20000 });
+    return await res.text();
+}
 
 async function fetchJSON(apiUrl, options = {}) {
-    const proxyUrl = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`;
-    const res = await fetchWithTimeout(proxyUrl, { ...options, timeout: options.timeout || 20000 });
-    const json = await res.json();
-    if (!json.contents) throw new Error('No contents from proxy');
-    return JSON.parse(json.contents);
+    const text = await fetchViaProxy(apiUrl, options);
+    return JSON.parse(text);
 }
 
 async function fetchRSS(feedUrl, count = 10) {
-    const proxyUrl = `${CORS_PROXY}${encodeURIComponent(feedUrl)}`;
-    const res = await fetchWithTimeout(proxyUrl, { timeout: 20000 });
-    const json = await res.json();
-    if (!json.contents) return { status: 'error', items: [] };
+    const text = await fetchViaProxy(feedUrl).catch(() => null);
+    if (!text) return { status: 'error', items: [] };
 
     const parser = new DOMParser();
-    const xml = parser.parseFromString(json.contents, 'text/xml');
+    const xml = parser.parseFromString(text, 'text/xml');
 
     // Support both RSS <item> and Atom <entry>
     const isAtom = xml.querySelector('feed') !== null;

@@ -68,23 +68,34 @@ const SIDEBAR_FEEDS = {
 };
 
 const CVE_API = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
-const CORS_PROXY = 'https://api.allorigins.win/get?url=';
-const CORS_PROXY_FALLBACK = 'https://corsproxy.io/?url=';
 
-async function fetchViaProxy(url, options = {}) {
-    // Try primary proxy first
-    try {
-        const proxyUrl = `${CORS_PROXY}${encodeURIComponent(url)}`;
-        const res = await fetchWithTimeout(proxyUrl, { ...options, timeout: options.timeout || 20000 });
-        const json = await res.json();
-        if (json && json.contents) return json.contents;
-    } catch (e) {
-        // fall through to backup
+// Ordered list of proxies to try. corsproxy.io returns raw text; allorigins wraps in JSON.
+const PROXIES = [
+    { url: 'https://corsproxy.io/?url=',          type: 'raw' },
+    { url: 'https://api.codetabs.com/v1/proxy?quest=', type: 'raw' },
+    { url: 'https://api.allorigins.win/get?url=',  type: 'allorigins' },
+];
+
+async function fetchViaProxy(targetUrl, options = {}) {
+    const timeout = options.timeout || 20000;
+    let lastErr;
+    for (const proxy of PROXIES) {
+        try {
+            const proxyUrl = `${proxy.url}${encodeURIComponent(targetUrl)}`;
+            const res = await fetchWithTimeout(proxyUrl, { timeout });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            if (proxy.type === 'allorigins') {
+                const json = await res.json();
+                if (json && json.contents) return json.contents;
+                throw new Error('allorigins: no contents');
+            }
+            return await res.text();
+        } catch (e) {
+            lastErr = e;
+            console.warn(`[Proxy] ${proxy.url} failed for ${targetUrl}:`, e.message);
+        }
     }
-    // Fallback proxy — returns raw text directly
-    const fallbackUrl = `${CORS_PROXY_FALLBACK}${encodeURIComponent(url)}`;
-    const res = await fetchWithTimeout(fallbackUrl, { ...options, timeout: options.timeout || 20000 });
-    return await res.text();
+    throw lastErr;
 }
 
 async function fetchJSON(apiUrl, options = {}) {

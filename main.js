@@ -70,6 +70,14 @@ const SIDEBAR_FEEDS = {
 const CVE_API = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
 const CORS_PROXY = 'https://api.allorigins.win/get?url=';
 
+async function fetchJSON(apiUrl, options = {}) {
+    const proxyUrl = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`;
+    const res = await fetchWithTimeout(proxyUrl, options);
+    const json = await res.json();
+    if (!json.contents) throw new Error('No contents from proxy');
+    return JSON.parse(json.contents);
+}
+
 async function fetchRSS(feedUrl, count = 10) {
     const proxyUrl = `${CORS_PROXY}${encodeURIComponent(feedUrl)}`;
     const res = await fetchWithTimeout(proxyUrl, { timeout: 10000 });
@@ -233,8 +241,7 @@ async function fetchCVEs() {
     try {
         console.log(`[CVE] Fetching modern vulnerabilities since: ${startDate}`);
         // NVD API call targeting a shorter window with more results per page
-        const res = await fetchWithTimeout(`${CVE_API}?pubStartDate=${startDate}&resultsPerPage=250`, { timeout: 15000 });
-        let data = await res.json();
+        let data = await fetchJSON(`${CVE_API}?pubStartDate=${startDate}&resultsPerPage=250`, { timeout: 15000 });
 
         if (data.vulnerabilities && data.vulnerabilities.length > 0) {
             allCVEs = data.vulnerabilities.map(v => {
@@ -259,8 +266,7 @@ async function fetchCVEs() {
         console.warn(`NVD Date-based fetch failed or returned empty. Searching by keyword 'CVE-${currentYear}'...`);
         try {
             // Fallback: Keyword search for current year to avoid 1999/2000 results
-            const fallbackRes = await fetchWithTimeout(`${CVE_API}?keywordSearch=CVE-${currentYear}&resultsPerPage=50`, { timeout: 8000 });
-            let data = await fallbackRes.json();
+            let data = await fetchJSON(`${CVE_API}?keywordSearch=CVE-${currentYear}&resultsPerPage=50`, { timeout: 8000 });
             if (data.vulnerabilities) {
                 allCVEs = data.vulnerabilities.map(v => {
                     const c = v.cve;
@@ -535,8 +541,7 @@ async function searchCVEs(keyword, timeframe = '6m') {
     try {
         // Step 1: Query NVD metadata to get totalResults count
         const initialUrl = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=1`;
-        const initialRes = await fetchWithTimeout(initialUrl, { timeout: 10000 });
-        const initialData = await initialRes.json();
+        const initialData = await fetchJSON(initialUrl, { timeout: 10000 });
         const totalResults = initialData.totalResults || 0;
 
         if (totalResults === 0) return [];
@@ -544,31 +549,24 @@ async function searchCVEs(keyword, timeframe = '6m') {
         let vulnerabilities = [];
 
         if (timeframe === 'all-old') {
-            // Fetch oldest first starting at 0
             const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=50&startIndex=0`;
-            const res = await fetchWithTimeout(url, { timeout: 10000 });
-            const data = await res.json();
+            const data = await fetchJSON(url, { timeout: 10000 });
             if (data.vulnerabilities) {
                 vulnerabilities = data.vulnerabilities.map(mapNvdCve);
             }
         } else if (timeframe === 'all-new') {
-            // Fetch newest first by querying the end of the list
             const fetchCount = Math.min(50, totalResults);
             const startIndex = Math.max(0, totalResults - fetchCount);
             const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=${fetchCount}&startIndex=${startIndex}`;
-            const res = await fetchWithTimeout(url, { timeout: 10000 });
-            const data = await res.json();
+            const data = await fetchJSON(url, { timeout: 10000 });
             if (data.vulnerabilities) {
                 vulnerabilities = data.vulnerabilities.map(mapNvdCve).reverse();
             }
         } else {
-            // Recent timeframes: '3m', '6m', or '12m'
-            // We fetch the latest 100 results and filter them client-side by publication date
             const fetchCount = Math.min(100, totalResults);
             const startIndex = Math.max(0, totalResults - fetchCount);
             const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=${fetchCount}&startIndex=${startIndex}`;
-            const res = await fetchWithTimeout(url, { timeout: 10000 });
-            const data = await res.json();
+            const data = await fetchJSON(url, { timeout: 10000 });
             if (data.vulnerabilities) {
                 const now = Date.now();
                 const limitMonths = timeframe === '3m' ? 3 : (timeframe === '6m' ? 6 : 12);

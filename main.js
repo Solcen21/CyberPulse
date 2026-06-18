@@ -84,7 +84,7 @@ let allBreaches = [];
 let allCVEs = [];
 let currentTagFilter = 'all';
 let currentSearchQuery = '';
-let currentCveTimeframe = '6m';
+let currentCveTimeframe = '3m';
 
 // --- Helpers ---
 
@@ -126,7 +126,7 @@ async function loadIntelligence() {
 async function fetchNews() {
     try {
         const promises = NEWS_FEEDS.map(f =>
-            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}`)
+            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}&count=50`)
                 .then(r => r.json())
                 .then(data => data.status === 'ok'
                     ? data.items
@@ -148,13 +148,14 @@ async function fetchNews() {
 
 function filterAndRenderNews() {
     let itemsToRender = allNews;
-    
+
     if (currentTagFilter === 'all') {
-        const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-        const recent = allNews.filter(item => new Date(item.pubDate) > fortyEightHoursAgo);
-        itemsToRender = recent.length > 0 ? recent.slice(0, 25) : allNews.slice(0, 15);
+        // Show all available articles sorted by date (no time-based cutoff)
+        itemsToRender = allNews.slice(0, 100);
     } else {
-        itemsToRender = allNews.filter(item => item.tag.toLowerCase() === currentTagFilter.toLowerCase()).slice(0, 25);
+        itemsToRender = allNews
+            .filter(item => item.tag.toLowerCase() === currentTagFilter.toLowerCase())
+            .slice(0, 100);
     }
 
     renderNews(itemsToRender);
@@ -163,7 +164,7 @@ function filterAndRenderNews() {
 async function fetchBreaches() {
     try {
         const promises = BREACH_FEEDS.map(f =>
-            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}`)
+            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}&count=50`)
                 .then(r => r.json())
                 .then(data => data.status === 'ok' ? data.items.map(item => ({ ...item, source: f.name, tag: f.tag })) : [])
                 .catch(() => [])
@@ -422,7 +423,7 @@ async function handleSearch() {
     }
 
     currentSearchQuery = query;
-    currentCveTimeframe = '6m'; // Reset to default 6 months for new search
+    currentCveTimeframe = '3m'; // Reset to default 3 months for new search
 
     // visual feedback
     mainTitle.innerHTML = `Searching for "<span class="query-highlight">${query}</span>"...`;
@@ -433,27 +434,43 @@ async function handleSearch() {
     backToNewsBtn.style.display = 'flex';
 
     try {
-        // 1. Live CVE Search targeting timeframe
+        // 1. Live CVE Search targeting timeframe (CVE-centric: search NVD by product/keyword)
         const liveCVEs = await searchCVEs(query, currentCveTimeframe);
 
-        // 2. Filter News (Last 3 Months)
+        // Extract CVE IDs to cross-reference against news articles
+        const cveIds = liveCVEs.map(c => c.id.toLowerCase());
+
+        // 2. Filter News (Last 3 Months) — match query text OR any associated CVE IDs
         const threeMonthsAgo = new Date();
         threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
         const foundNews = allNews.filter(item => {
             const itemDate = new Date(item.pubDate);
-            return itemDate >= threeMonthsAgo && (
-                item.title.toLowerCase().includes(query) ||
-                item.description.toLowerCase().includes(query) ||
-                item.source.toLowerCase().includes(query)
-            );
+            if (itemDate < threeMonthsAgo) return false;
+
+            const titleLower = item.title.toLowerCase();
+            const descLower = (item.description || '').toLowerCase();
+            const sourceLower = item.source.toLowerCase();
+
+            // Match by search query text
+            const matchesQuery = titleLower.includes(query) ||
+                descLower.includes(query) ||
+                sourceLower.includes(query);
+
+            // Match by CVE ID cross-reference (CVE-centric: pulls in articles about related CVEs)
+            const matchesCve = cveIds.length > 0 &&
+                cveIds.some(id => titleLower.includes(id) || descLower.includes(id));
+
+            return matchesQuery || matchesCve;
         });
 
-        // 3. Filter Breaches (Local)
-        const foundBreaches = allBreaches.filter(item =>
-            item.title.toLowerCase().includes(query) ||
-            item.source.toLowerCase().includes(query)
-        );
+        // 3. Filter Breaches — match query text OR CVE IDs
+        const foundBreaches = allBreaches.filter(item => {
+            const titleLower = item.title.toLowerCase();
+            const matchesQuery = titleLower.includes(query) || item.source.toLowerCase().includes(query);
+            const matchesCve = cveIds.length > 0 && cveIds.some(id => titleLower.includes(id));
+            return matchesQuery || matchesCve;
+        });
 
         // 4. Combine Local CVEs + Live CVEs (Deduplicate by ID)
         const localCVEMatches = allCVEs.filter(item =>
@@ -461,7 +478,7 @@ async function handleSearch() {
             item.description.toLowerCase().includes(query)
         );
 
-        // Map to ensure unique IDs
+        // Map to ensure unique IDs — live CVE results take precedence
         const cveMap = new Map();
         localCVEMatches.forEach(c => cveMap.set(c.id, c));
         liveCVEs.forEach(c => cveMap.set(c.id, c));
@@ -508,7 +525,7 @@ async function searchCVEs(keyword, timeframe = '6m') {
                 vulnerabilities = data.vulnerabilities.map(mapNvdCve).reverse();
             }
         } else {
-            // Recent timeframes: '6m' or '12m'
+            // Recent timeframes: '3m', '6m', or '12m'
             // We fetch the latest 100 results and filter them client-side by publication date
             const fetchCount = Math.min(100, totalResults);
             const startIndex = Math.max(0, totalResults - fetchCount);
@@ -517,7 +534,7 @@ async function searchCVEs(keyword, timeframe = '6m') {
             const data = await res.json();
             if (data.vulnerabilities) {
                 const now = Date.now();
-                const limitMonths = timeframe === '6m' ? 6 : 12;
+                const limitMonths = timeframe === '3m' ? 3 : (timeframe === '6m' ? 6 : 12);
                 const limitMs = limitMonths * 30 * 24 * 60 * 60 * 1000;
 
                 vulnerabilities = data.vulnerabilities
@@ -554,7 +571,7 @@ function showNewsView() {
     newsGrid.style.display = 'grid';
     categoryFilters.style.display = 'flex';
     backToNewsBtn.style.display = 'none';
-    mainTitle.innerHTML = 'Latest News <span class="time-label">(Last 24 Hours)</span>';
+    mainTitle.innerHTML = 'Latest News <span class="time-label">(All Available)</span>';
 }
 
 function renderDiscovery(results, query) {
@@ -579,7 +596,7 @@ function renderDiscovery(results, query) {
 
     // Results Link Sections
     if (results.news.length > 0) {
-        discoveryView.appendChild(createDiscoverySection('Related Security News (Last 1 Month)', results.news, 'news'));
+        discoveryView.appendChild(createDiscoverySection('Related Security News (Last 3 Months)', results.news, 'news'));
     }
 
     // Always append CVE section to allow timeframe switching
@@ -764,6 +781,7 @@ function createCveDiscoverySection(title, items) {
             <div class="cve-timeframe-selector">
                 <label for="cveTimeframe">Timeframe:</label>
                 <select id="cveTimeframe">
+                    <option value="3m" ${currentCveTimeframe === '3m' ? 'selected' : ''}>Last 3 Months</option>
                     <option value="6m" ${currentCveTimeframe === '6m' ? 'selected' : ''}>Last 6 Months</option>
                     <option value="12m" ${currentCveTimeframe === '12m' ? 'selected' : ''}>Last 12 Months</option>
                     <option value="all-new" ${currentCveTimeframe === 'all-new' ? 'selected' : ''}>All Time (Newest)</option>

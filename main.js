@@ -68,7 +68,47 @@ const SIDEBAR_FEEDS = {
 };
 
 const CVE_API = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
-const API_BASE = 'https://api.rss2json.com/v1/api.json?rss_url=';
+const CORS_PROXY = 'https://api.allorigins.win/get?url=';
+
+async function fetchRSS(feedUrl, count = 10) {
+    const proxyUrl = `${CORS_PROXY}${encodeURIComponent(feedUrl)}`;
+    const res = await fetchWithTimeout(proxyUrl, { timeout: 10000 });
+    const json = await res.json();
+    if (!json.contents) return { status: 'error', items: [] };
+
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(json.contents, 'text/xml');
+
+    // Support both RSS <item> and Atom <entry>
+    const isAtom = xml.querySelector('feed') !== null;
+    const entries = isAtom
+        ? Array.from(xml.querySelectorAll('entry'))
+        : Array.from(xml.querySelectorAll('item'));
+
+    const items = entries.slice(0, count).map(el => {
+        const get = (tag) => el.querySelector(tag)?.textContent?.trim() || '';
+        const getAttr = (tag, attr) => el.querySelector(tag)?.getAttribute(attr) || '';
+
+        let link = '';
+        if (isAtom) {
+            link = getAttr('link[rel="alternate"]', 'href') || getAttr('link', 'href') || get('id');
+        } else {
+            link = get('link') || get('guid');
+        }
+
+        const pubDate = get('pubDate') || get('published') || get('updated') || '';
+        const description = get('description') || get('summary') || get('content') || '';
+
+        return {
+            title: get('title'),
+            link,
+            pubDate,
+            description,
+        };
+    }).filter(item => item.title && item.link);
+
+    return { status: 'ok', items };
+}
 
 const newsGrid = document.getElementById('newsGrid');
 const breachList = document.getElementById('breachList');
@@ -126,8 +166,7 @@ async function loadIntelligence() {
 async function fetchNews() {
     try {
         const promises = NEWS_FEEDS.map(f =>
-            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}&count=10`)
-                .then(r => r.json())
+            fetchRSS(f.url, 10)
                 .then(data => data.status === 'ok'
                     ? data.items
                         .map(item => ({ ...item, source: f.name, tag: f.tag }))
@@ -164,8 +203,7 @@ function filterAndRenderNews() {
 async function fetchBreaches() {
     try {
         const promises = BREACH_FEEDS.map(f =>
-            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}&count=10`)
-                .then(r => r.json())
+            fetchRSS(f.url, 10)
                 .then(data => data.status === 'ok' ? data.items.map(item => ({ ...item, source: f.name, tag: f.tag })) : [])
                 .catch(() => [])
         );
@@ -379,8 +417,7 @@ async function fetchSidebarFeed(providerId, container) {
     container.innerHTML = '<div class="feed-item"><div class="feed-item-title">Gathering Intel...</div></div>';
 
     try {
-        const res = await fetchWithTimeout(`${API_BASE}${encodeURIComponent(provider.url)}`);
-        const data = await res.json();
+        const data = await fetchRSS(provider.url, 3);
 
         if (data.status === 'ok' && data.items.length > 0) {
             container.innerHTML = '';
@@ -889,8 +926,7 @@ async function fetchRedditFeed(sub) {
     if (!feed) return;
 
     try {
-        const res = await fetchWithTimeout(`${API_BASE}${encodeURIComponent(feed.url)}`, { timeout: 8000 });
-        const data = await res.json();
+        const data = await fetchRSS(feed.url, 12);
 
         if (data.status === 'ok' && data.items && data.items.length > 0) {
             const posts = data.items.slice(0, 12).map(item => ({

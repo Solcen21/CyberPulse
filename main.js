@@ -69,38 +69,50 @@ const SIDEBAR_FEEDS = {
 
 const CVE_API = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
 
-// Ordered list of proxies to try. corsproxy.io returns raw text; allorigins wraps in JSON.
 const PROXIES = [
-    { url: 'https://corsproxy.io/?url=',          type: 'raw' },
+    { url: 'https://corsproxy.io/?url=',               type: 'raw' },
     { url: 'https://api.codetabs.com/v1/proxy?quest=', type: 'raw' },
-    { url: 'https://api.allorigins.win/get?url=',  type: 'allorigins' },
+    { url: 'https://api.allorigins.win/get?url=',       type: 'allorigins' },
 ];
 
+// Race all proxies — return whichever responds successfully first
 async function fetchViaProxy(targetUrl, options = {}) {
-    const timeout = options.timeout || 20000;
-    let lastErr;
-    for (const proxy of PROXIES) {
-        try {
-            const proxyUrl = `${proxy.url}${encodeURIComponent(targetUrl)}`;
-            const res = await fetchWithTimeout(proxyUrl, { timeout });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            if (proxy.type === 'allorigins') {
-                const json = await res.json();
-                if (json && json.contents) return json.contents;
-                throw new Error('allorigins: no contents');
-            }
-            return await res.text();
-        } catch (e) {
-            lastErr = e;
-            console.warn(`[Proxy] ${proxy.url} failed for ${targetUrl}:`, e.message);
-        }
-    }
-    throw lastErr;
+    const timeout = options.timeout || 8000;
+
+    const attempts = PROXIES.map(proxy => {
+        const proxyUrl = `${proxy.url}${encodeURIComponent(targetUrl)}`;
+        return fetchWithTimeout(proxyUrl, { timeout })
+            .then(async res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (proxy.type === 'allorigins') {
+                    const json = await res.json();
+                    if (!json?.contents) throw new Error('no contents');
+                    return json.contents;
+                }
+                return res.text();
+            });
+    });
+
+    // Return first success; if all fail, throw
+    return Promise.any(attempts);
 }
 
 async function fetchJSON(apiUrl, options = {}) {
-    const text = await fetchViaProxy(apiUrl, options);
-    return JSON.parse(text);
+    const timeout = options.timeout || 8000;
+    // Try direct first (NVD does set CORS headers on some responses)
+    try {
+        const res = await fetchWithTimeout(apiUrl, { timeout });
+        if (res.ok) return await res.json();
+    } catch (e) { /* fall through */ }
+
+    // Proxy fallback — allorigins is most reliable for JSON APIs
+    const proxied = await fetchWithTimeout(
+        `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`,
+        { timeout: 15000 }
+    );
+    const json = await proxied.json();
+    if (json?.contents) return JSON.parse(json.contents);
+    throw new Error('CVE fetch failed via all methods');
 }
 
 async function fetchRSS(feedUrl, count = 10) {

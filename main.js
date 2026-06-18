@@ -126,7 +126,7 @@ async function loadIntelligence() {
 async function fetchNews() {
     try {
         const promises = NEWS_FEEDS.map(f =>
-            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}&count=50`)
+            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}&count=10`)
                 .then(r => r.json())
                 .then(data => data.status === 'ok'
                     ? data.items
@@ -164,7 +164,7 @@ function filterAndRenderNews() {
 async function fetchBreaches() {
     try {
         const promises = BREACH_FEEDS.map(f =>
-            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}&count=50`)
+            fetchWithTimeout(`${API_BASE}${encodeURIComponent(f.url)}&count=10`)
                 .then(r => r.json())
                 .then(data => data.status === 'ok' ? data.items.map(item => ({ ...item, source: f.name, tag: f.tag })) : [])
                 .catch(() => [])

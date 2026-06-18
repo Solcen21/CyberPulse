@@ -10,7 +10,7 @@ CyberPulse is a client-side cybersecurity intelligence dashboard that aggregates
 
 ### 📰 News Aggregation (Main Page)
 
-The main page compiles **all available articles** from 21+ security-focused RSS feeds, sorted chronologically. Each feed requests up to 50 items, providing broad coverage across the security landscape. Articles are displayed in a responsive card grid and can be filtered by category.
+The main page compiles **all available articles** from 21+ security-focused RSS feeds, sorted chronologically. Each feed requests up to 10 items (maximum allowed on rss2json's free plan), providing broad coverage across the security landscape. Articles are displayed in a responsive card grid and can be filtered by category.
 
 **Category filters:**
 `All` · `Vulnerability` · `Tooling` · `Breach` · `Security` · `Research` · `Investigation` · `Global` · `Industry` · `Enterprise`
@@ -101,7 +101,7 @@ CyberPulse is a fully installable PWA with:
 ```
 
 **Data flow:**
-1. **RSS Feeds** — Fetched via `api.rss2json.com` to bypass CORS. Each feed requests up to 50 items (`&count=50`).
+1. **RSS Feeds** — Fetched via `api.rss2json.com` to bypass CORS. Each feed requests up to 10 items (`&count=10`) due to free tier API constraints.
 2. **NVD API 2.0** — Queried directly for CVE data. The main dashboard fetches CVEs from the last 14 days (up to 250 results). Search queries use keyword-based lookups with client-side date filtering.
 3. **Reddit** — Subreddit RSS feeds are also fetched via rss2json, cached in-memory for 5 minutes.
 4. **All data is stored in-memory** (`allNews`, `allBreaches`, `allCVEs`) and re-fetched every 15 minutes.
@@ -252,7 +252,7 @@ No build tools, no bundlers, no npm dependencies. The entire application is 4 fi
 ### rss2json (RSS Feeds)
 - Free tier: No API key required for basic usage
 - Rate limits apply — the app staggers requests across feeds
-- The `&count=50` parameter requests up to 50 items per feed (free tier may cap lower)
+- The `&count=10` parameter requests up to 10 items per feed (the maximum allowed on rss2json's free tier)
 
 ### NVD API 2.0 (CVE Data)
 - No API key required (public access)

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cyberpulse-v10';
+const CACHE_NAME = 'cyberpulse-v12';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -21,25 +21,30 @@ self.addEventListener('install', (event) => {
     );
 });
 
-// Fetch Event: Network first for HTML/JS/CSS, cache fallback
+// Fetch Event: Network first for core assets, bypass for external APIs
 self.addEventListener('fetch', (event) => {
+    // Only handle GET requests and local/same-origin HTTP/HTTPS schemes
+    if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
+        return;
+    }
+
     const url = new URL(event.request.url);
-    const isCoreAsset = ['/index.html', '/style.css', '/main.js', '/sw.js'].some(p => url.pathname.endsWith(p)) || url.pathname === '/';
+    const isCoreAsset = [
+        '/index.html', '/style.css', '/main.js', '/sw.js',
+        '/manifest.json', '/icon-192.png', '/icon-512.png', '/'
+    ].some(p => url.pathname === p || url.pathname.endsWith(p));
 
     if (isCoreAsset) {
         event.respondWith(
             fetch(event.request)
                 .then(res => {
-                    const clone = res.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                    if (res.status === 200) {
+                        const clone = res.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+                    }
                     return res;
                 })
                 .catch(() => caches.match(event.request))
-        );
-    } else {
-        event.respondWith(
-            caches.match(event.request)
-                .then((response) => response || fetch(event.request))
         );
     }
 });

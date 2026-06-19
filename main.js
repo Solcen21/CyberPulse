@@ -67,7 +67,8 @@ const SIDEBAR_FEEDS = {
     'acsc': { name: 'ACSC (AU)', url: 'https://www.cyber.gov.au/about-us/advisories-and-alerts/rss.xml', home: 'https://www.cyber.gov.au/' }
 };
 
-const CVE_API = 'https://services.nvd.nist.gov/rest/json/cves/2.0';
+
+
 
 const PROXIES = [
     { url: 'https://corsproxy.io/?url=',               type: 'raw' },
@@ -97,23 +98,8 @@ async function fetchViaProxy(targetUrl, options = {}) {
     return Promise.any(attempts);
 }
 
-async function fetchJSON(apiUrl, options = {}) {
-    const timeout = options.timeout || 8000;
-    // Try direct first (NVD does set CORS headers on some responses)
-    try {
-        const res = await fetchWithTimeout(apiUrl, { timeout });
-        if (res.ok) return await res.json();
-    } catch (e) { /* fall through */ }
 
-    // Proxy fallback — allorigins is most reliable for JSON APIs
-    const proxied = await fetchWithTimeout(
-        `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`,
-        { timeout: 15000 }
-    );
-    const json = await proxied.json();
-    if (json?.contents) return JSON.parse(json.contents);
-    throw new Error('CVE fetch failed via all methods');
-}
+
 
 async function fetchRSS(feedUrl, count = 10) {
     const text = await fetchViaProxy(feedUrl).catch(() => null);
@@ -262,64 +248,52 @@ async function fetchBreaches() {
     }
 }
 
+// NVD RSS feeds — no CORS issues, works through existing proxy system
+const NVD_FEEDS = [
+    { url: 'https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml',         label: 'Recent CVEs' },
+    { url: 'https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss-analyzed.xml', label: 'Analyzed CVEs' },
+];
+
 async function fetchCVEs() {
-    let now = new Date();
-    // Safety check for environment clock issues
-    if (now.getFullYear() < 2024) now = new Date('2026-01-18T00:00:00');
-
-    const formatNVDDate = (date) => date.toISOString().replace('Z', '');
-
-    // Target: Filter by current window (14 days) to prioritize recent vulnerabilities
-    const windowDays = 14;
-    const startDate = formatNVDDate(new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000));
-
     try {
-        console.log(`[CVE] Fetching modern vulnerabilities since: ${startDate}`);
-        // NVD API call targeting a shorter window with more results per page
-        let data = await fetchJSON(`${CVE_API}?pubStartDate=${startDate}&resultsPerPage=250`, { timeout: 20000 });
+        const results = await Promise.all(NVD_FEEDS.map(f => fetchRSS(f.url, 50).catch(() => ({ status: 'error', items: [] }))));
+        const items = results.flatMap(r => r.status === 'ok' ? r.items : []);
 
-        if (data.vulnerabilities && data.vulnerabilities.length > 0) {
-            allCVEs = data.vulnerabilities.map(v => {
-                const c = v.cve;
-                const metrics = c.metrics?.cvssMetricV31?.[0] || c.metrics?.cvssMetricV30?.[0] || c.metrics?.cvssMetricV2?.[0];
+        if (items.length === 0) throw new Error('No CVE items from RSS');
+
+        // De-duplicate by CVE ID (title starts with CVE-YYYY-NNNNN)
+        const seen = new Set();
+        allCVEs = items
+            .filter(item => {
+                const id = item.title?.match(/CVE-\d{4}-\d+/)?.[0];
+                if (!id || seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            })
+            .map(item => {
+                const id = item.title.match(/CVE-\d{4}-\d+/)?.[0] || item.title;
+                // NVD RSS titles look like "CVE-2026-1234 - Description here"
+                const description = item.title.replace(/^CVE-\d{4}-\d+\s*[-–]\s*/, '') ||
+                                    item.description || 'No description available';
+                // Try to extract CVSS score from description text
+                const scoreMatch = (item.description || '').match(/(?:base score|cvss)[:\s]+(\d+\.?\d*)/i);
+                const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+
                 return {
-                    id: c.id,
-                    description: (c.descriptions.find(d => d.lang === 'en')?.value || 'No description'),
-                    score: metrics?.cvssData?.baseScore || 0,
-                    link: `https://nvd.nist.gov/vuln/detail/${c.id}`,
-                    date: c.published
+                    id,
+                    description,
+                    score,
+                    link: item.link || `https://nvd.nist.gov/vuln/detail/${id}`,
+                    date: item.pubDate || new Date().toISOString()
                 };
-            });
-            renderCVEs();
-            updateStatusText();
-        } else {
-            throw new Error("Date-based fetch returned zero results");
-        }
+            })
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        renderCVEs();
+        updateStatusText();
+        console.log(`[CVE] Loaded ${allCVEs.length} CVEs from NVD RSS`);
     } catch (err) {
-        let currentYear = new Date().getFullYear();
-        if (currentYear < 2024) currentYear = 2026; // Match safety guard
-        console.warn(`NVD Date-based fetch failed or returned empty. Searching by keyword 'CVE-${currentYear}'...`);
-        try {
-            // Fallback: Keyword search for current year to avoid 1999/2000 results
-            let data = await fetchJSON(`${CVE_API}?keywordSearch=CVE-${currentYear}&resultsPerPage=50`, { timeout: 20000 });
-            if (data.vulnerabilities) {
-                allCVEs = data.vulnerabilities.map(v => {
-                    const c = v.cve;
-                    const metrics = c.metrics?.cvssMetricV31?.[0] || c.metrics?.cvssMetricV30?.[0] || c.metrics?.cvssMetricV2?.[0];
-                    return {
-                        id: c.id,
-                        description: c.descriptions[0].value,
-                        score: metrics?.cvssData?.baseScore || 0,
-                        link: `https://nvd.nist.gov/vuln/detail/${c.id}`,
-                        date: c.published
-                    };
-                });
-                renderCVEs();
-                updateStatusText();
-            }
-        } catch (f) {
-            console.error("CVE keyword fallback failed:", f);
-        }
+        console.error('[CVE] RSS fetch failed:', err);
     }
 }
 
@@ -572,68 +546,22 @@ async function handleSearch() {
 }
 
 async function searchCVEs(keyword, timeframe = '6m') {
-    if (keyword.length < 3) return []; // optimization
-    try {
-        // Step 1: Query NVD metadata to get totalResults count
-        const initialUrl = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=1`;
-        const initialData = await fetchJSON(initialUrl, { timeout: 20000 });
-        const totalResults = initialData.totalResults || 0;
+    if (keyword.length < 3) return [];
+    const kw = keyword.toLowerCase();
+    const now = Date.now();
+    const monthsMap = { '3m': 3, '6m': 6, '12m': 12 };
+    const limitMs = (monthsMap[timeframe] || 6) * 30 * 24 * 60 * 60 * 1000;
 
-        if (totalResults === 0) return [];
-
-        let vulnerabilities = [];
-
-        if (timeframe === 'all-old') {
-            const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=50&startIndex=0`;
-            const data = await fetchJSON(url, { timeout: 20000 });
-            if (data.vulnerabilities) {
-                vulnerabilities = data.vulnerabilities.map(mapNvdCve);
-            }
-        } else if (timeframe === 'all-new') {
-            const fetchCount = Math.min(50, totalResults);
-            const startIndex = Math.max(0, totalResults - fetchCount);
-            const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=${fetchCount}&startIndex=${startIndex}`;
-            const data = await fetchJSON(url, { timeout: 20000 });
-            if (data.vulnerabilities) {
-                vulnerabilities = data.vulnerabilities.map(mapNvdCve).reverse();
-            }
-        } else {
-            const fetchCount = Math.min(100, totalResults);
-            const startIndex = Math.max(0, totalResults - fetchCount);
-            const url = `${CVE_API}?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=${fetchCount}&startIndex=${startIndex}`;
-            const data = await fetchJSON(url, { timeout: 20000 });
-            if (data.vulnerabilities) {
-                const now = Date.now();
-                const limitMonths = timeframe === '3m' ? 3 : (timeframe === '6m' ? 6 : 12);
-                const limitMs = limitMonths * 30 * 24 * 60 * 60 * 1000;
-
-                vulnerabilities = data.vulnerabilities
-                    .map(mapNvdCve)
-                    .reverse()
-                    .filter(c => {
-                        const pubTime = new Date(c.date).getTime();
-                        return (now - pubTime) <= limitMs;
-                    });
-            }
-        }
-        return vulnerabilities;
-    } catch (e) {
-        console.warn("Live CVE search error:", e);
-        return [];
-    }
+    return allCVEs.filter(c => {
+        const matches = c.id.toLowerCase().includes(kw) || c.description.toLowerCase().includes(kw);
+        if (!matches) return false;
+        if (timeframe === 'all-old' || timeframe === 'all-new') return true;
+        return (now - new Date(c.date).getTime()) <= limitMs;
+    });
 }
 
-function mapNvdCve(v) {
-    const c = v.cve;
-    const metrics = c.metrics?.cvssMetricV31?.[0] || c.metrics?.cvssMetricV30?.[0] || c.metrics?.cvssMetricV2?.[0];
-    return {
-        id: c.id,
-        description: (c.descriptions.find(d => d.lang === 'en')?.value || 'No description'),
-        score: metrics?.cvssData?.baseScore || 0,
-        link: `https://nvd.nist.gov/vuln/detail/${c.id}`,
-        date: c.published
-    };
-}
+
+
 
 
 function showNewsView() {

@@ -70,74 +70,50 @@ const SIDEBAR_FEEDS = {
 
 
 
+// !! Replace with your Cloudflare Worker URL after deploying worker.js !!
+const WORKER_URL = 'https://cyberpulse.solcen21.workers.dev/';
+
+// Lightweight proxy fallback for on-demand sidebar/reddit fetches (not bulk feeds)
 const PROXIES = [
-    { url: 'https://corsproxy.io/?url=',               type: 'raw' },
-    { url: 'https://api.codetabs.com/v1/proxy?quest=', type: 'raw' },
-    { url: 'https://api.allorigins.win/get?url=',       type: 'allorigins' },
+    { url: 'https://corsproxy.io/?url=', type: 'raw' },
+    { url: 'https://api.allorigins.win/get?url=', type: 'allorigins' },
 ];
 
-// Race all proxies — return whichever responds successfully first
-async function fetchViaProxy(targetUrl, options = {}) {
-    const timeout = options.timeout || 8000;
-
-    const attempts = PROXIES.map(proxy => {
-        const proxyUrl = `${proxy.url}${encodeURIComponent(targetUrl)}`;
-        return fetchWithTimeout(proxyUrl, { timeout })
+async function fetchRSS(feedUrl, count = 10) {
+    const attempts = PROXIES.map(proxy =>
+        fetchWithTimeout(`${proxy.url}${encodeURIComponent(feedUrl)}`, { timeout: 8000 })
             .then(async res => {
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                if (proxy.type === 'allorigins') {
-                    const json = await res.json();
-                    if (!json?.contents) throw new Error('no contents');
-                    return json.contents;
-                }
-                return res.text();
-            });
-    });
-
-    // Return first success; if all fail, throw
-    return Promise.any(attempts);
+                const text = proxy.type === 'allorigins'
+                    ? (await res.json()).contents
+                    : await res.text();
+                if (!text) throw new Error('empty');
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(text, 'text/xml');
+                const isAtom = xml.querySelector('feed') !== null;
+                const entries = Array.from(xml.querySelectorAll(isAtom ? 'entry' : 'item'));
+                const items = entries.slice(0, count).map(el => {
+                    const get = t => el.querySelector(t)?.textContent?.trim() || '';
+                    const getAttr = (t, a) => el.querySelector(t)?.getAttribute(a) || '';
+                    const link = isAtom
+                        ? (getAttr('link[rel="alternate"]', 'href') || getAttr('link', 'href') || get('id'))
+                        : (get('link') || get('guid'));
+                    return {
+                        title: get('title'), link,
+                        pubDate: get('pubDate') || get('published') || get('updated') || '',
+                        description: get('description') || get('summary') || '',
+                    };
+                }).filter(i => i.title && i.link);
+                return { status: 'ok', items };
+            })
+    );
+    try {
+        return await Promise.any(attempts);
+    } catch {
+        return { status: 'error', items: [] };
+    }
 }
 
-
-
-
-async function fetchRSS(feedUrl, count = 10) {
-    const text = await fetchViaProxy(feedUrl).catch(() => null);
-    if (!text) return { status: 'error', items: [] };
-
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(text, 'text/xml');
-
-    // Support both RSS <item> and Atom <entry>
-    const isAtom = xml.querySelector('feed') !== null;
-    const entries = isAtom
-        ? Array.from(xml.querySelectorAll('entry'))
-        : Array.from(xml.querySelectorAll('item'));
-
-    const items = entries.slice(0, count).map(el => {
-        const get = (tag) => el.querySelector(tag)?.textContent?.trim() || '';
-        const getAttr = (tag, attr) => el.querySelector(tag)?.getAttribute(attr) || '';
-
-        let link = '';
-        if (isAtom) {
-            link = getAttr('link[rel="alternate"]', 'href') || getAttr('link', 'href') || get('id');
-        } else {
-            link = get('link') || get('guid');
-        }
-
-        const pubDate = get('pubDate') || get('published') || get('updated') || '';
-        const description = get('description') || get('summary') || get('content') || '';
-
-        return {
-            title: get('title'),
-            link,
-            pubDate,
-            description,
-        };
-    }).filter(item => item.title && item.link);
-
-    return { status: 'ok', items };
-}
 
 const newsGrid = document.getElementById('newsGrid');
 const breachList = document.getElementById('breachList');
@@ -194,18 +170,13 @@ async function loadIntelligence() {
 
 async function fetchNews() {
     try {
-        const promises = NEWS_FEEDS.map(f =>
-            fetchRSS(f.url, 10)
-                .then(data => data.status === 'ok'
-                    ? data.items
-                        .map(item => ({ ...item, source: f.name, tag: f.tag }))
-                        .filter(isCyberRelevant)
-                    : [])
-                .catch(() => [])
-        );
+        const res = await fetchWithTimeout(`${WORKER_URL}/feeds?type=news`, { timeout: 15000 });
+        const data = await res.json();
+        if (!data.ok) throw new Error('Worker returned error');
 
-        const results = await Promise.all(promises);
-        allNews = results.flat().sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+        allNews = data.items
+            .filter(isCyberRelevant)
+            .sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
         filterAndRenderNews();
         updateStatusText();
@@ -213,6 +184,7 @@ async function fetchNews() {
         console.error("News fetch failed:", err);
     }
 }
+
 
 function filterAndRenderNews() {
     let itemsToRender = allNews;
@@ -231,15 +203,11 @@ function filterAndRenderNews() {
 
 async function fetchBreaches() {
     try {
-        const promises = BREACH_FEEDS.map(f =>
-            fetchRSS(f.url, 10)
-                .then(data => data.status === 'ok' ? data.items.map(item => ({ ...item, source: f.name, tag: f.tag })) : [])
-                .catch(() => [])
-        );
+        const res = await fetchWithTimeout(`${WORKER_URL}/feeds?type=breaches`, { timeout: 15000 });
+        const data = await res.json();
+        if (!data.ok) throw new Error('Worker returned error');
 
-        const results = await Promise.all(promises);
-        allBreaches = results.flat().sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-
+        allBreaches = data.items.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
         renderBreaches(allBreaches.filter(item => new Date(item.pubDate) > thirtyDaysAgo).slice(0, 15));
         updateStatusText();
@@ -248,22 +216,14 @@ async function fetchBreaches() {
     }
 }
 
-// NVD RSS feeds — no CORS issues, works through existing proxy system
-const NVD_FEEDS = [
-    { url: 'https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml',         label: 'Recent CVEs' },
-    { url: 'https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss-analyzed.xml', label: 'Analyzed CVEs' },
-];
-
 async function fetchCVEs() {
     try {
-        const results = await Promise.all(NVD_FEEDS.map(f => fetchRSS(f.url, 50).catch(() => ({ status: 'error', items: [] }))));
-        const items = results.flatMap(r => r.status === 'ok' ? r.items : []);
+        const res = await fetchWithTimeout(`${WORKER_URL}/feeds?type=cves`, { timeout: 15000 });
+        const data = await res.json();
+        if (!data.ok) throw new Error('Worker returned error');
 
-        if (items.length === 0) throw new Error('No CVE items from RSS');
-
-        // De-duplicate by CVE ID (title starts with CVE-YYYY-NNNNN)
         const seen = new Set();
-        allCVEs = items
+        allCVEs = data.items
             .filter(item => {
                 const id = item.title?.match(/CVE-\d{4}-\d+/)?.[0];
                 if (!id || seen.has(id)) return false;
@@ -272,13 +232,9 @@ async function fetchCVEs() {
             })
             .map(item => {
                 const id = item.title.match(/CVE-\d{4}-\d+/)?.[0] || item.title;
-                // NVD RSS titles look like "CVE-2026-1234 - Description here"
-                const description = item.title.replace(/^CVE-\d{4}-\d+\s*[-–]\s*/, '') ||
-                                    item.description || 'No description available';
-                // Try to extract CVSS score from description text
+                const description = item.title.replace(/^CVE-\d{4}-\d+\s*[-–]\s*/, '') || item.description || 'No description';
                 const scoreMatch = (item.description || '').match(/(?:base score|cvss)[:\s]+(\d+\.?\d*)/i);
                 const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
-
                 return {
                     id,
                     description,
@@ -291,11 +247,13 @@ async function fetchCVEs() {
 
         renderCVEs();
         updateStatusText();
-        console.log(`[CVE] Loaded ${allCVEs.length} CVEs from NVD RSS`);
+        console.log(`[CVE] Loaded ${allCVEs.length} CVEs`);
     } catch (err) {
-        console.error('[CVE] RSS fetch failed:', err);
+        console.error('[CVE] Fetch failed:', err);
     }
 }
+
+
 
 function updateStatusText() {
     const newsCount = allNews.length;
@@ -843,12 +801,12 @@ function initSidebarCollapsing() {
 // --- Reddit Community Feed ---
 
 const REDDIT_FEEDS = {
-    'netsec':         { url: 'https://www.reddit.com/r/netsec/.rss',           label: 'r/netsec' },
-    'cybersecurity':  { url: 'https://www.reddit.com/r/cybersecurity/.rss',    label: 'r/cybersecurity' },
-    'hacking':        { url: 'https://www.reddit.com/r/hacking/.rss',          label: 'r/hacking' },
-    'malware':        { url: 'https://www.reddit.com/r/Malware/.rss',          label: 'r/Malware' },
-    'AskNetsec':      { url: 'https://www.reddit.com/r/AskNetsec/.rss',        label: 'r/AskNetsec' },
-    'darkweb':        { url: 'https://www.reddit.com/r/darkweb/.rss',          label: 'r/darkweb' },
+    'netsec': { url: 'https://www.reddit.com/r/netsec/.rss', label: 'r/netsec' },
+    'cybersecurity': { url: 'https://www.reddit.com/r/cybersecurity/.rss', label: 'r/cybersecurity' },
+    'hacking': { url: 'https://www.reddit.com/r/hacking/.rss', label: 'r/hacking' },
+    'malware': { url: 'https://www.reddit.com/r/Malware/.rss', label: 'r/Malware' },
+    'AskNetsec': { url: 'https://www.reddit.com/r/AskNetsec/.rss', label: 'r/AskNetsec' },
+    'darkweb': { url: 'https://www.reddit.com/r/darkweb/.rss', label: 'r/darkweb' },
     'ReverseEngineering': { url: 'https://www.reddit.com/r/ReverseEngineering/.rss', label: 'r/ReverseEngineering' }
 };
 

@@ -71,7 +71,7 @@ const SIDEBAR_FEEDS = {
 
 
 // !! Replace with your Cloudflare Worker URL after deploying worker.js !!
-const WORKER_URL = 'https://cyberpulse.solcen21.workers.dev/';
+const WORKER_URL = 'https://cyberpulse.solcen21.workers.dev';
 
 // Lightweight proxy fallback for on-demand sidebar/reddit fetches (not bulk feeds)
 const PROXIES = [

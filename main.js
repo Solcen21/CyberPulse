@@ -71,12 +71,12 @@ const SIDEBAR_FEEDS = {
 
 
 // !! Replace with your Cloudflare Worker URL after deploying worker.js !!
-const WORKER_URL = 'https://cyberpulse.solcen21.workers.dev';
+const WORKER_URL = 'https://cyberpulse-feeds.YOUR-SUBDOMAIN.workers.dev';
 
 // Lightweight proxy fallback for on-demand sidebar/reddit fetches (not bulk feeds)
 const PROXIES = [
-    { url: 'https://corsproxy.io/?url=', type: 'raw' },
-    { url: 'https://api.allorigins.win/get?url=', type: 'allorigins' },
+    { url: 'https://corsproxy.io/?url=',                type: 'raw' },
+    { url: 'https://api.allorigins.win/get?url=',        type: 'allorigins' },
 ];
 
 async function fetchRSS(feedUrl, count = 10) {
@@ -426,16 +426,10 @@ const backToNewsBtn = document.getElementById('backToNews');
 const mainTitle = document.querySelector('.filter-bar h2');
 
 async function handleSearch() {
-    const query = searchInput.value.trim().toLowerCase();
-    if (!query) {
-        showNewsView();
-        return;
-    }
+    const query = searchInput.value.trim();
+    if (!query) { showNewsView(); return; }
 
-    currentSearchQuery = query;
-    currentCveTimeframe = '3m'; // Reset to default 3 months for new search
-
-    // visual feedback
+    currentSearchQuery = query.toLowerCase();
     mainTitle.innerHTML = `Searching for "<span class="query-highlight">${query}</span>"...`;
     discoveryView.innerHTML = '<div class="skeleton-card"></div><div class="skeleton-card"></div>';
     newsGrid.style.display = 'none';
@@ -444,78 +438,42 @@ async function handleSearch() {
     backToNewsBtn.style.display = 'flex';
 
     try {
-        // 1. Live CVE Search targeting timeframe (CVE-centric: search NVD by product/keyword)
-        const liveCVEs = await searchCVEs(query, currentCveTimeframe);
-
-        // Extract CVE IDs to cross-reference against news articles
-        const cveIds = liveCVEs.map(c => c.id.toLowerCase());
-
-        // 2. Filter News (Last 3 Months) — match query text OR any associated CVE IDs
-        const threeMonthsAgo = new Date();
-        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-
-        const foundNews = allNews.filter(item => {
-            const itemDate = new Date(item.pubDate);
-            if (itemDate < threeMonthsAgo) return false;
-
-            const titleLower = item.title.toLowerCase();
-            const descLower = (item.description || '').toLowerCase();
-            const sourceLower = item.source.toLowerCase();
-
-            // Match by search query text
-            const matchesQuery = titleLower.includes(query) ||
-                descLower.includes(query) ||
-                sourceLower.includes(query);
-
-            // Match by CVE ID cross-reference (CVE-centric: pulls in articles about related CVEs)
-            const matchesCve = cveIds.length > 0 &&
-                cveIds.some(id => titleLower.includes(id) || descLower.includes(id));
-
-            return matchesQuery || matchesCve;
-        });
-
-        // 3. Filter Breaches — match query text OR CVE IDs
-        const foundBreaches = allBreaches.filter(item => {
-            const titleLower = item.title.toLowerCase();
-            const matchesQuery = titleLower.includes(query) || item.source.toLowerCase().includes(query);
-            const matchesCve = cveIds.length > 0 && cveIds.some(id => titleLower.includes(id));
-            return matchesQuery || matchesCve;
-        });
-
-        // 4. Combine Local CVEs + Live CVEs (Deduplicate by ID)
-        const localCVEMatches = allCVEs.filter(item =>
-            item.id.toLowerCase().includes(query) ||
-            item.description.toLowerCase().includes(query)
+        const res = await fetchWithTimeout(
+            `${WORKER_URL}/search?q=${encodeURIComponent(query)}&type=all&days=90`,
+            { timeout: 15000 }
         );
+        const data = await res.json();
+        if (!data.ok) throw new Error('Search failed');
 
-        // Map to ensure unique IDs — live CVE results take precedence
-        const cveMap = new Map();
-        localCVEMatches.forEach(c => cveMap.set(c.id, c));
-        liveCVEs.forEach(c => cveMap.set(c.id, c));
+        const news     = data.results.filter(r => r._type === 'article' && r.tag !== 'Leak');
+        const breaches = data.results.filter(r => r._type === 'article' && r.tag === 'Leak');
+        const cves     = data.results.filter(r => r._type === 'cve');
 
-        const uniqueCVEs = Array.from(cveMap.values());
-
-        renderDiscovery({ news: foundNews, breaches: foundBreaches, cves: uniqueCVEs }, query);
+        renderDiscovery({ news, breaches, cves }, query.toLowerCase());
 
     } catch (error) {
-        console.error("Search failed:", error);
+        console.error('Search failed:', error);
         discoveryView.innerHTML = `<div class="discovery-section"><p>Search failed. Please try again.</p></div>`;
     }
 }
 
+// searchCVEs kept for any timeframe re-filter calls
 async function searchCVEs(keyword, timeframe = '6m') {
     if (keyword.length < 3) return [];
-    const kw = keyword.toLowerCase();
-    const now = Date.now();
-    const monthsMap = { '3m': 3, '6m': 6, '12m': 12 };
-    const limitMs = (monthsMap[timeframe] || 6) * 30 * 24 * 60 * 60 * 1000;
-
-    return allCVEs.filter(c => {
-        const matches = c.id.toLowerCase().includes(kw) || c.description.toLowerCase().includes(kw);
-        if (!matches) return false;
-        if (timeframe === 'all-old' || timeframe === 'all-new') return true;
-        return (now - new Date(c.date).getTime()) <= limitMs;
-    });
+    try {
+        const days = timeframe === '3m' ? 90 : timeframe === '6m' ? 180 : timeframe === '12m' ? 365 : 0;
+        const res = await fetchWithTimeout(
+            `${WORKER_URL}/search?q=${encodeURIComponent(keyword)}&type=cves&days=${days}`,
+            { timeout: 15000 }
+        );
+        const data = await res.json();
+        return data.ok ? data.results.filter(r => r._type === 'cve') : [];
+    } catch {
+        return allCVEs.filter(c =>
+            c.id.toLowerCase().includes(keyword.toLowerCase()) ||
+            c.description.toLowerCase().includes(keyword.toLowerCase())
+        );
+    }
 }
 
 
@@ -801,12 +759,12 @@ function initSidebarCollapsing() {
 // --- Reddit Community Feed ---
 
 const REDDIT_FEEDS = {
-    'netsec': { url: 'https://www.reddit.com/r/netsec/.rss', label: 'r/netsec' },
-    'cybersecurity': { url: 'https://www.reddit.com/r/cybersecurity/.rss', label: 'r/cybersecurity' },
-    'hacking': { url: 'https://www.reddit.com/r/hacking/.rss', label: 'r/hacking' },
-    'malware': { url: 'https://www.reddit.com/r/Malware/.rss', label: 'r/Malware' },
-    'AskNetsec': { url: 'https://www.reddit.com/r/AskNetsec/.rss', label: 'r/AskNetsec' },
-    'darkweb': { url: 'https://www.reddit.com/r/darkweb/.rss', label: 'r/darkweb' },
+    'netsec':         { url: 'https://www.reddit.com/r/netsec/.rss',           label: 'r/netsec' },
+    'cybersecurity':  { url: 'https://www.reddit.com/r/cybersecurity/.rss',    label: 'r/cybersecurity' },
+    'hacking':        { url: 'https://www.reddit.com/r/hacking/.rss',          label: 'r/hacking' },
+    'malware':        { url: 'https://www.reddit.com/r/Malware/.rss',          label: 'r/Malware' },
+    'AskNetsec':      { url: 'https://www.reddit.com/r/AskNetsec/.rss',        label: 'r/AskNetsec' },
+    'darkweb':        { url: 'https://www.reddit.com/r/darkweb/.rss',          label: 'r/darkweb' },
     'ReverseEngineering': { url: 'https://www.reddit.com/r/ReverseEngineering/.rss', label: 'r/ReverseEngineering' }
 };
 

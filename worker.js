@@ -58,6 +58,16 @@ const BREACH_FEEDS = [
   { name: 'Bleeping (Breach)',  url: 'https://www.bleepingcomputer.com/news/security/breach/feed/',  tag: 'Breach' },
 ];
 
+const REDDIT_FEEDS = {
+  netsec:             { url: 'https://www.reddit.com/r/netsec/.rss',              label: 'r/netsec' },
+  cybersecurity:      { url: 'https://www.reddit.com/r/cybersecurity/.rss',       label: 'r/cybersecurity' },
+  hacking:            { url: 'https://www.reddit.com/r/hacking/.rss',             label: 'r/hacking' },
+  malware:            { url: 'https://www.reddit.com/r/Malware/.rss',             label: 'r/Malware' },
+  AskNetsec:          { url: 'https://www.reddit.com/r/AskNetsec/.rss',           label: 'r/AskNetsec' },
+  darkweb:            { url: 'https://www.reddit.com/r/darkweb/.rss',             label: 'r/darkweb' },
+  ReverseEngineering: { url: 'https://www.reddit.com/r/ReverseEngineering/.rss',  label: 'r/ReverseEngineering' },
+};
+
 const CVE_FEEDS = [
   { name: 'NVD Recent',   url: 'https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml' },
   { name: 'NVD Analyzed', url: 'https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss-analyzed.xml' },
@@ -77,6 +87,36 @@ export default {
     if (p === '/') {
       const meta = await env.DB.get('meta:lastRefresh');
       return json({ status: 'online', lastRefresh: meta || 'never' });
+    }
+
+    // GET /reddit?sub=netsec
+    if (p === '/reddit') {
+      const sub = url.searchParams.get('sub') || 'netsec';
+      const feed = REDDIT_FEEDS[sub];
+      if (!feed) return json({ error: 'Unknown subreddit' }, 400);
+
+      const cacheKey = new Request(`https://cache.cyberpulse/reddit/${sub}`, request);
+      const cache = caches.default;
+      let cached = await cache.match(cacheKey);
+      if (cached) return new Response(cached.body, { headers: { ...corsHeaders, 'X-Cache': 'HIT', 'Content-Type': 'application/json' } });
+
+      try {
+        const items = await fetchAndParseFeed({ ...feed, name: feed.label, tag: 'Reddit' });
+        const posts = items.map(item => ({
+          title: item.title,
+          link: item.link,
+          pubDate: item.pubDate,
+          author: item.description?.match(/submitted by.*?<a[^>]*>([^<]+)<\/a>/i)?.[1] || feed.label,
+          sub: feed.label,
+        }));
+        const response = json({ ok: true, posts });
+        ctx.waitUntil(cache.put(cacheKey, new Response(JSON.stringify({ ok: true, posts }), {
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' }
+        })));
+        return response;
+      } catch (e) {
+        return json({ ok: false, error: e.message, posts: [] });
+      }
     }
 
     // GET /feeds?type=news|breaches|cves
@@ -227,12 +267,16 @@ async function refreshCVEs(env) {
     })
     .map(item => {
       const id = item.title.match(/CVE-\d{4}-\d+/)?.[0] || item.title;
-      const description = item.description || item.title.replace(/^CVE-\d{4}-\d+\s*[-–]\s*/, '') || '';
-      const scoreMatch = description.match(/(?:base score|cvss)[:\s]+(\d+\.?\d*)/i);
+      const desc = item.description || '';
+      const scoreMatch = desc.match(/cvss\s+v[\d.]+[:\s]+(\d+\.?\d*)/i)
+        || desc.match(/base\s+score[:\s]+(\d+\.?\d*)/i)
+        || desc.match(/score[:\s]+(\d+\.?\d*)/i);
+      const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+      const cleanDesc = (desc || item.title.replace(/^CVE-\d{4}-\d+\s*[-–:]\s*/, '') || 'No description').slice(0, 500);
       return {
         id,
-        description,
-        score: scoreMatch ? parseFloat(scoreMatch[1]) : 0,
+        description: cleanDesc,
+        score,
         link: item.link || `https://nvd.nist.gov/vuln/detail/${id}`,
         date: item.pubDate || new Date().toISOString(),
       };
@@ -347,3 +391,5 @@ function decodeEntities(str) {
     .replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&apos;/g, "'")
     .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(parseInt(c)));
 }
+
+// appended — this block is intentionally blank, real edits below

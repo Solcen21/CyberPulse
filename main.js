@@ -799,28 +799,20 @@ async function fetchRedditFeed(sub) {
     const container = document.getElementById('xFeedContainer');
     container.innerHTML = '<div class="skeleton-item mini"></div><div class="skeleton-item mini" style="margin-top:8px"></div><div class="skeleton-item mini" style="margin-top:8px"></div>';
 
-    const feed = REDDIT_FEEDS[sub];
-    if (!feed) return;
-
     try {
-        const data = await fetchRSS(feed.url, 12);
+        const res = await fetchWithTimeout(`${WORKER_URL}/reddit?sub=${encodeURIComponent(sub)}`, { timeout: 15000 });
+        const data = await res.json();
 
-        if (data.status === 'ok' && data.items && data.items.length > 0) {
-            const posts = data.items.slice(0, 12).map(item => ({
-                title: item.title,
-                author: item.author ? `u/${item.author.replace(/^u\//, '')}` : feed.label,
-                link: item.link,
-                date: item.pubDate,
-                sub: feed.label
-            }));
-            redditFeedCache[sub] = posts;
-            renderRedditFeed(posts);
+        if (data.ok && data.posts && data.posts.length > 0) {
+            redditFeedCache[sub] = data.posts;
+            renderRedditFeed(data.posts);
         } else {
-            container.innerHTML = `<div class="x-feed-error">No posts found for ${feed.label}.</div>`;
+            const feed = REDDIT_FEEDS[sub];
+            container.innerHTML = `<div class="x-feed-error">No posts found for ${feed?.label || sub}.</div>`;
         }
     } catch (e) {
         console.warn(`[Reddit Feed] Failed for ${sub}:`, e.message);
-        container.innerHTML = `<div class="x-feed-error">Could not load ${feed.label}. <a href="https://reddit.com/r/${sub}" target="_blank">View on Reddit →</a></div>`;
+        container.innerHTML = `<div class="x-feed-error">Could not load r/${sub}. <a href="https://reddit.com/r/${sub}" target="_blank">View on Reddit →</a></div>`;
     }
 }
 

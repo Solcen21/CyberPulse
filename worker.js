@@ -172,7 +172,7 @@ export default {
 
         // Also hit NVD API directly for deeper CVE search
         try {
-          const nvdResults = await searchNVD(q);
+          const nvdResults = await searchNVD(q, days || 365);
           // Merge, de-duplicate by id
           const existingIds = new Set(results.filter(r => r._type === 'cve').map(r => r.id));
           for (const c of nvdResults) {
@@ -254,44 +254,54 @@ async function refreshBucket(env, bucket, feeds) {
 }
 
 async function refreshCVEs(env) {
-  const results = await Promise.allSettled(CVE_FEEDS.map(f => fetchAndParseFeed(f)));
-  const raw = results.filter(r => r.status === 'fulfilled').flatMap(r => r.value);
+  // Use NVD JSON API directly — no CORS issues server-side
+  const now = new Date();
+  const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().replace('Z', '');
+  const end = now.toISOString().replace('Z', '');
 
-  const seen = new Set();
-  const cves = raw
-    .filter(item => {
-      const id = item.title?.match(/CVE-\d{4}-\d+/)?.[0];
-      if (!id || seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    })
-    .map(item => {
-      const id = item.title.match(/CVE-\d{4}-\d+/)?.[0] || item.title;
-      const desc = item.description || '';
-      const scoreMatch = desc.match(/cvss\s+v[\d.]+[:\s]+(\d+\.?\d*)/i)
-        || desc.match(/base\s+score[:\s]+(\d+\.?\d*)/i)
-        || desc.match(/score[:\s]+(\d+\.?\d*)/i);
-      const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
-      const cleanDesc = (desc || item.title.replace(/^CVE-\d{4}-\d+\s*[-–:]\s*/, '') || 'No description').slice(0, 500);
-      return {
-        id,
-        description: cleanDesc,
-        score,
-        link: item.link || `https://nvd.nist.gov/vuln/detail/${id}`,
-        date: item.pubDate || new Date().toISOString(),
-      };
-    })
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  let cves = [];
+  try {
+    const res = await fetch(
+      `https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=${start}&pubEndDate=${end}&resultsPerPage=200`,
+      { headers: { 'User-Agent': 'CyberPulse/1.0' } }
+    );
+    const data = await res.json();
+    if (data.vulnerabilities?.length) {
+      cves = data.vulnerabilities.map(v => mapNvdCve(v));
+      console.log(`[Refresh] cves: fetched ${cves.length} from NVD API`);
+    }
+  } catch (e) {
+    console.error('[Refresh] NVD API failed:', e.message);
+  }
 
-  await env.DB.put('articles:cves', JSON.stringify(cves.slice(0, 200)), {
-    expirationTtl: 2 * 24 * 60 * 60,
+  if (cves.length === 0) {
+    console.warn('[Refresh] CVE fetch returned 0 results, skipping KV write');
+    return;
+  }
+
+  await env.DB.put('articles:cves', JSON.stringify(cves), {
+    expirationTtl: 6 * 60 * 60, // refresh every 6 hours
   });
   console.log(`[Refresh] cves: stored ${cves.length} items`);
 }
 
 // Live fetch fallback when KV is empty
 async function liveFetch(type) {
-  const feedMap = { news: NEWS_FEEDS, breaches: BREACH_FEEDS, cves: CVE_FEEDS };
+  if (type === 'cves') {
+    const now = new Date();
+    const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().replace('Z', '');
+    try {
+      const res = await fetch(
+        `https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=${start}&resultsPerPage=100`,
+        { headers: { 'User-Agent': 'CyberPulse/1.0' } }
+      );
+      const data = await res.json();
+      return (data.vulnerabilities || []).map(v => mapNvdCve(v));
+    } catch (e) {
+      return [];
+    }
+  }
+  const feedMap = { news: NEWS_FEEDS, breaches: BREACH_FEEDS };
   const feeds = feedMap[type] || [];
   const results = await Promise.allSettled(feeds.map(f => fetchAndParseFeed(f)));
   return results.filter(r => r.status === 'fulfilled').flatMap(r => r.value);
@@ -299,11 +309,12 @@ async function liveFetch(type) {
 
 // ─── NVD API Search (server-side, no CORS issues) ────────────────────────────
 
-async function searchNVD(keyword) {
-  const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=${encodeURIComponent(keyword)}&resultsPerPage=50`;
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'CyberPulse/1.0' },
-  });
+async function searchNVD(keyword, days = 365) {
+  // Filter to recent CVEs — avoids 1999-era results drowning out current ones
+  const now = new Date();
+  const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString().replace('Z', '');
+  const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch=${encodeURIComponent(keyword)}&pubStartDate=${start}&resultsPerPage=50`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'CyberPulse/1.0' } });
   if (!res.ok) throw new Error(`NVD HTTP ${res.status}`);
   const data = await res.json();
   if (!data.vulnerabilities) return [];

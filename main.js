@@ -75,8 +75,8 @@ const WORKER_URL = 'https://cyberpulse.solcen21.workers.dev';
 
 // Lightweight proxy fallback for on-demand sidebar/reddit fetches (not bulk feeds)
 const PROXIES = [
-    { url: 'https://corsproxy.io/?url=',                type: 'raw' },
-    { url: 'https://api.allorigins.win/get?url=',        type: 'allorigins' },
+    { url: 'https://corsproxy.io/?url=', type: 'raw' },
+    { url: 'https://api.allorigins.win/get?url=', type: 'allorigins' },
 ];
 
 async function fetchRSS(feedUrl, count = 10) {
@@ -445,9 +445,9 @@ async function handleSearch() {
         const data = await res.json();
         if (!data.ok) throw new Error('Search failed');
 
-        const news     = data.results.filter(r => r._type === 'article' && r.tag !== 'Leak');
+        const news = data.results.filter(r => r._type === 'article' && r.tag !== 'Leak');
         const breaches = data.results.filter(r => r._type === 'article' && r.tag === 'Leak');
-        const cves     = data.results.filter(r => r._type === 'cve');
+        const cves = data.results.filter(r => r._type === 'cve');
 
         renderDiscovery({ news, breaches, cves }, query.toLowerCase());
 
@@ -759,12 +759,12 @@ function initSidebarCollapsing() {
 // --- Reddit Community Feed ---
 
 const REDDIT_FEEDS = {
-    'netsec':         { url: 'https://www.reddit.com/r/netsec/.rss',           label: 'r/netsec' },
-    'cybersecurity':  { url: 'https://www.reddit.com/r/cybersecurity/.rss',    label: 'r/cybersecurity' },
-    'hacking':        { url: 'https://www.reddit.com/r/hacking/.rss',          label: 'r/hacking' },
-    'malware':        { url: 'https://www.reddit.com/r/Malware/.rss',          label: 'r/Malware' },
-    'AskNetsec':      { url: 'https://www.reddit.com/r/AskNetsec/.rss',        label: 'r/AskNetsec' },
-    'darkweb':        { url: 'https://www.reddit.com/r/darkweb/.rss',          label: 'r/darkweb' },
+    'netsec': { url: 'https://www.reddit.com/r/netsec/.rss', label: 'r/netsec' },
+    'cybersecurity': { url: 'https://www.reddit.com/r/cybersecurity/.rss', label: 'r/cybersecurity' },
+    'hacking': { url: 'https://www.reddit.com/r/hacking/.rss', label: 'r/hacking' },
+    'malware': { url: 'https://www.reddit.com/r/Malware/.rss', label: 'r/Malware' },
+    'AskNetsec': { url: 'https://www.reddit.com/r/AskNetsec/.rss', label: 'r/AskNetsec' },
+    'darkweb': { url: 'https://www.reddit.com/r/darkweb/.rss', label: 'r/darkweb' },
     'ReverseEngineering': { url: 'https://www.reddit.com/r/ReverseEngineering/.rss', label: 'r/ReverseEngineering' }
 };
 
@@ -804,7 +804,9 @@ async function fetchRedditFeed(sub) {
         const data = await res.json();
 
         if (data.ok && data.posts && data.posts.length > 0) {
-            redditFeedCache[sub] = data.posts;
+            // normalise date field — worker returns pubDate
+            const posts = data.posts.map(p => ({ ...p, date: p.date || p.pubDate }));
+            redditFeedCache[sub] = posts;
             renderRedditFeed(data.posts);
         } else {
             const feed = REDDIT_FEEDS[sub];
@@ -832,7 +834,7 @@ function renderRedditFeed(posts) {
 
         const color = avatarColor(post.sub);
         const initials = getInitials(post.sub);
-        const ago = timeAgo(post.date);
+        const ago = timeAgo(post.date || post.pubDate);
 
         div.innerHTML = `
             <div class="x-tweet-header">
